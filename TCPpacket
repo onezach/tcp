@@ -1,0 +1,96 @@
+public class TCPpacket {
+    // actual TCP packet headers
+    private DatagramPacket UDPpacket;
+    private int sequenceNum;
+    private int ack;
+    private long timeStamp;
+    private int length;
+    private boolean synFlag;
+    private boolean finFlag;
+    private boolean ackFlag;
+    private short zeros;
+    private short checksum;
+
+    // constants and other attributes
+    private static final int MAX_DATA_LEN = 1446;
+
+    // Constructor
+    public TCPpacket(DatagramPacket UDPpacket) {
+        this.UDPpacket = UDPpacket;
+        this.zeros = 0;
+    }
+
+    // Setters
+    public void setSequenceNum(int sequenceNum) {
+        this.sequenceNum = sequenceNum;
+    }
+    public void setAck(int ack) {
+        this.ack = ack;
+    }
+    public void setTimeStamp(long timeStamp) {
+        this.timeStamp = timeStamp;
+    }
+    public void setLength(int length) {
+        this.length = length;
+    }
+    public void setSynFlag(boolean synFlag) {
+        this.synFlag = synFlag;
+    }
+    public void setFinFlag(boolean finFlag) {
+        this.finFlag = finFlag;
+    }
+    public void setAckFlag(boolean ackFlag) {
+        this.ackFlag = ackFlag;
+    }
+    public void setChecksum(short checksum) {
+        this.checksum = checksum;
+    }
+
+    // Getters
+    public DatagramPacket getUDPpacket() {
+        return this.UDPpacket;
+    }
+    public int getSequenceNum() {
+        return this.sequenceNum;
+    }
+    public int getAck() {
+        return this.ack;
+    }
+    public long getTimeStamp() {
+        return this.timeStamp;
+    }
+    public int getLength() {
+        return this.length;
+    }
+    public boolean getSynFlag() {
+        return this.synFlag;
+    }
+    public boolean getFinFlag() {
+        return this.finFlag;
+    }
+    public boolean getAckFlag() {
+        return this.ackFlag;
+    }
+    public short setChecksum() {
+        return this.checksum;
+    }
+
+    // Useful Methods
+
+    public byte[] serialize() {
+
+    }
+
+    public TCPpacket deserialize() {
+
+    }
+
+    @Override
+    public String toString() {
+        String str = "";
+        str.
+        
+    }
+
+
+}
