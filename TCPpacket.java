@@ -1,3 +1,5 @@
+import java.net.DatagramPacket;
+
 public class TCPpacket {
     // actual TCP packet headers
     private DatagramPacket UDPpacket;
@@ -78,17 +80,29 @@ public class TCPpacket {
     // Useful Methods
 
     public byte[] serialize() {
-
+        return null;
     }
 
     public TCPpacket deserialize() {
-
+        return null;
     }
 
     @Override
     public String toString() {
         String str = "";
-        
+        str+= "sequenceNum: " + this.sequenceNum + "\n";
+        str+= "ack: " + this.ack + "\n";
+        str+= "timeStamp: " + this.timeStamp + "\n";
+        str+= "length: " + this.length + "\n";
+        str+= "synFlag: " + this.synFlag + "\n";
+        str+= "finFlag: " + this.finFlag + "\n";
+        str+= "ackFlag: " + this.ackFlag + "\n";
+        str+= "zeros: " + this.zeros + "\n";
+        str+= "checksum: " + this.checksum + "\n";
+        str+= "datagram buffer length: " + this.UDPpacket.getLength();
+        str+= "datagram addr: " + this.UDPpacket.getAddress().toString();
+        str+= "datagram portNum: " + this.UDPpacket.getPort();
+        return str;
     }
 
 
