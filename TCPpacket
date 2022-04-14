@@ -88,7 +88,6 @@ public class TCPpacket {
     @Override
     public String toString() {
         String str = "";
-        str.
         
     }
 

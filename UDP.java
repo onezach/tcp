@@ -7,7 +7,7 @@ import java.net.UnknownHostException;
 
 public class UDP {
 
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) throws IOException, InterruptedException {
         if (args[0].equals("-s"))
             sender();
         else if (args[0].equals("-r")) 
@@ -38,13 +38,13 @@ public class UDP {
         System.out.println("Starting Sender");
 
         // create sender socket
-        DatagramSocket socket = new DatagramSocket();
+        DatagramSocket socket = new DatagramSocket(); // NOTE: sender cannot have same port number as reciever port if on same machine
         InetAddress outAddr = InetAddress.getByName("localhost");
         int outPort = 1234;
 
         while (true) {
             // create payLoad
-            String payLoad = "Hello There";
+            String payLoad = "Hello";
             byte[] buf = payLoad.getBytes();
 
             // create Packet
