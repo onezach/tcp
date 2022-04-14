@@ -111,6 +111,33 @@ public class TCPpacket {
 
     }
 
+    private int deserializeLength(int lengthField) {
+        return lengthField >> 3;
+    }
+    private boolean deserializeSyn(int lengthField) {
+        int syn = lengthField & (1 << 2);
+        if (syn == 4) {
+            return true;
+        }
+        return false;
+    }
+    private boolean deserializeFin(int lengthField) {
+        int fin = lengthField & (1 << 1);
+        if (fin == 2) {
+            return true;
+        }
+        return false;
+    }
+
+    private boolean deserializeAck(int lengthField) {
+        int ack = lengthField & 1;
+        if (ack == 1) {
+            return true;
+        }
+        return false;
+    }
+
+
     // Useful Methods
 
     public byte[] serialize() {
@@ -138,9 +165,30 @@ public class TCPpacket {
         return data;
     }
 
-    public TCPpacket deserialize(byte[] data) {
+    public void deserialize(byte[] data) {
+        ByteBuffer bb = ByteBuffer.wrap(data);
 
-        return null;
+        // create tcp headers
+        this.sequenceNum = bb.getInt();
+        this.ack = bb.getInt();
+        this.timeStamp = bb.getLong();
+        int lengthField = bb.getInt();
+        this.length = deserializeLength(lengthField);
+        this.synFlag = deserializeSyn(lengthField);
+        this.finFlag = deserializeFin(lengthField);
+        this.ackFlag = deserializeAck(lengthField);
+        this.zeros = bb.getShort();
+        this.checksum = bb.getShort();
+
+        // if payload exists, add
+        if (data.length > 24) {
+            this.payload = new byte[data.length - 24];
+            for (int i = 0; i < data.length - 24; i++) {
+                byte b = bb.get();
+                this.payload[i] = b;
+            }
+            
+        }
     }
 
     @Override
@@ -156,16 +204,55 @@ public class TCPpacket {
         str+= "zeros: " + this.zeros + "\n";
         str+= "checksum: " + this.checksum + "\n";
         if (this.payload != null) {
+            System.out.println("BAM");
+            System.out.println(this.payload.length - 21);
             str+= "payLoad length: " + this.payload.length + "\n";
             if (this.payload.length > 20){
-                str+= "first 20 characters: " + new String(this.payload, 0, 80) + "\n";
-                str+= "last 20 characters: " + new String(this.payload, this.payload.length - 81, 80) + "\n";
+                str+= "first 20 characters: " + new String(this.payload, 0, 20) + "\n";
+                str+= "last 20 characters: " + new String(this.payload, this.payload.length - 20, 20) + "\n";
+            }
+            else {
+                str+= "first char: " + new String(this.payload, 0, 1) + "\n";
+                str+= "last char: " + new String(this.payload, this.payload.length - 1, 1) + "\n";
             }
         }
         else {
             str+= "Payload: null\n";
         }
         return str;
+    }
+
+    // Main method is for local testing purposes
+    public static void main(String[] args) {
+        // create arbitrary packet
+        TCPpacket packet = new TCPpacket();
+
+        // set packets fields
+        packet.setSequenceNum(1000);
+        packet.setAck(1000);
+        packet.setTimeStamp(123456789);
+        packet.setLength(1000);
+        packet.setSynFlag(true);
+        packet.setFinFlag(false);
+        packet.setAckFlag(true);
+        packet.setChecksum((short)10);
+        String str = "12345678901234567890-----09876543210987654321";
+        //String str = "12345";
+        byte[] strByte = str.getBytes();
+        packet.setPayload(strByte);
+
+
+        // serialize the packet into a byte[]
+        byte[] serialzied = packet.serialize();
+
+        // create new packet
+        TCPpacket desrialized = new TCPpacket();
+
+        // set new packet equal to desialized of old packet
+        desrialized.deserialize(serialzied);
+        System.out.println(desrialized);
+
+
     }
 
 
