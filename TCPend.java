@@ -108,7 +108,7 @@ public class TCPend {
 
     private static void handleHandShake(TCPpacket tcpIn, DatagramPacket packetIn) throws IOException {
         // check if initial message is handhsake starter
-        if (!tcpIn.getAckFlag() || tcpIn.getAck() != expectedSeqNum) {
+        if (!tcpIn.getAckFlag() || tcpIn.getAck() != sequenceNum) {
             System.out.println("Error: recieved packet in stage Hnadshake without ack or wrong ack");
             // Drop Packet
             return;
