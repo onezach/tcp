@@ -19,7 +19,8 @@ public class TCPend {
     public static TCPpacket tcpIn;
     public static TCPpacket tcpOut;
     public static Stage stage;
-    public static int expectedAck;
+    public static int sequenceNum;
+    public static int expectedSeqNum;
 
     
     public static void sender(int port, String remoteIP, int remotePort, String fileName, int mtu, int sws) throws IOException {
@@ -128,8 +129,9 @@ public class TCPend {
 
         // create TCP packet out
         tcpOut = new TCPpacket();
-        int sequenceNum = 100;
+        sequenceNum = 100;
         tcpOut.setSequenceNum(sequenceNum);
+        tcpOut.setSynFlag(true);
         tcpOut.setAck(tcpIn.getSequenceNum() + 1);
         tcpOut.setAckFlag(true);
 
@@ -148,12 +150,13 @@ public class TCPend {
 
         // update
         stage = Stage.HANDSHAKE;
-        expectedAck = sequenceNum + 1;
+        expectedSeqNum = tcpOut.getAck();
+        sequenceNum++;
     }
 
     private static void handleHandShake(TCPpacket tcpIn, DatagramPacket packetIn) throws IOException {
         // check if initial message is handhsake starter
-        if (!tcpIn.getAckFlag() || tcpIn.getAck() != expectedAck) {
+        if (!tcpIn.getAckFlag() || tcpIn.getAck() != expectedSeqNum) {
             System.out.println("Error: recieved packet in stage Hnadshake without ack or wrong ack");
             // Drop Packet
             return;
@@ -165,11 +168,35 @@ public class TCPend {
 
         // update current stage
         stage = Stage.DATA_TRANSFER;
-        expectedAck++;
     }
 
     private static void handleDataTransfer(TCPpacket tcpIn, DatagramPacket packetIn) throws IOException {
+        if (tcpIn.getSequenceNum() != expectedSeqNum){
+            System.out.println("Error: wrong sequence number recieved in data_transfer stage, dropping packet");
+        }
+        System.out.println("Succesfully recived data packet");
+        System.out.println("packet:\n" + new String(tcpIn.getPayload(), 0, tcpIn.getPayload().length));
 
+        expectedSeqNum++;
+
+        // create TCP packet to send ACK
+        tcpOut = new TCPpacket();
+        tcpOut.setAck(tcpIn.getSequenceNum() + 1);
+        tcpOut.setAckFlag(true);
+
+        // serialize
+        byte[] out = tcpOut.serialize();
+
+        // get information on sender so that we can send packets back
+        int senderPort = packetIn.getPort();
+        InetAddress senderAddress = packetIn.getAddress();
+        
+        // create Datagram out
+        packetOut = new DatagramPacket(out, out.length, senderAddress, senderPort);
+        
+        // send ACK
+        socket.send(packetOut);
+        System.out.println("Sending ACK for seq " + tcpIn.getSequenceNum());
     }
 
     private static void handleFin(TCPpacket tcpIn, DatagramPacket packetIn) throws IOException {
