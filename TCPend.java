@@ -41,7 +41,7 @@ public class TCPend {
         byte[] out = tcpOut.serialize();
         packetOut = new DatagramPacket(out, out.length, outAddr, remotePort);
         socket.send(packetOut);
-        outSeq++;
+        outSeq++; // 1
 
         // response back from receiver
         packetIn = new DatagramPacket(buffer, buffer.length);
@@ -62,6 +62,7 @@ public class TCPend {
         tcpOut = new TCPpacket();
         tcpOut.setAckFlag(true);
         tcpOut.setAck(inSeq + 1);
+        System.out.println("Sender sends ack " + (inSeq + 1));
         byte[] out2 = tcpOut.serialize();
         packetOut = new DatagramPacket(out2, out2.length, outAddr, remotePort);
         socket.send(packetOut);
