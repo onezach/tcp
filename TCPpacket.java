@@ -202,9 +202,9 @@ public class TCPpacket {
         this.checksum = bb.getShort();
 
         // if payload exists, add
-        if (data.length > 24) {
-            this.payload = new byte[data.length - 24];
-            for (int i = 0; i < data.length - 24; i++) {
+        if (this.length > 24) {
+            this.payload = new byte[this.length - 24];
+            for (int i = 0; i < this.length - 24; i++) {
                 byte b = bb.get();
                 this.payload[i] = b;
             }
