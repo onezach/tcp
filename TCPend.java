@@ -1,3 +1,6 @@
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -21,6 +24,9 @@ public class TCPend {
     public static Stage stage;
     public static int sequenceNum;
     public static int expectedSeqNum;
+    public static File outFile;
+    public static FileWriter fw;
+    public static BufferedWriter bw;
 
     
     public static void sender(int port, String remoteIP, int remotePort, String fileName, int mtu, int sws) throws IOException {
@@ -155,7 +161,7 @@ public class TCPend {
         sequenceNum++;
     }
 
-    private static void handleHandShake(TCPpacket tcpIn, DatagramPacket packetIn) throws IOException {
+    private static void handleHandShake(TCPpacket tcpIn, DatagramPacket packetIn, String fileName) throws IOException {
         // check if initial message is handhsake starter
         if (!tcpIn.getAckFlag() || tcpIn.getAck() != sequenceNum) {
             System.out.println("Error: recieved packet in stage Hnadshake without ack or wrong ack");
@@ -171,14 +177,24 @@ public class TCPend {
         stage = Stage.DATA_TRANSFER;
     }
 
-    private static void handleDataTransfer(TCPpacket tcpIn, DatagramPacket packetIn) throws IOException {
+    private static void writeToFile(FileWriter fw, BufferedWriter bw, byte[] payload) throws IOException {
+        String payloadStr = new String(payload, 0, payload.length);
+        bw.write(payloadStr, 0, payloadStr.length());
+    }
+
+    private static void handleDataTransfer(TCPpacket tcpIn, DatagramPacket packetIn, FileWriter fw, BufferedWriter bw) throws IOException {
+        // check if next packet is next contigous
         if (tcpIn.getSequenceNum() != expectedSeqNum){
             System.out.println("Error: wrong sequence number recieved in data_transfer stage, dropping packet");
         }
+
         System.out.println("Succesfully recived data packet");
         System.out.println("packet:\n" + new String(tcpIn.getPayload(), 0, tcpIn.getPayload().length));
 
         expectedSeqNum++;
+
+        // write packet to file
+        writeToFile(fw, bw, tcpIn.getPayload());
 
         // create TCP packet to send ACK
         tcpOut = new TCPpacket();
@@ -256,6 +272,10 @@ public class TCPend {
     public static void receiver(int port, int mtu, int sws, String fileName) throws IOException {
         System.out.println("Starting Reciever");
         stage = Stage.NO_CONNECTION;
+        outFile = new File(fileName);
+        fw = new FileWriter(outFile);
+        bw = new BufferedWriter(fw);
+        
         socket = new DatagramSocket(port);
 
         while (true) {
@@ -277,10 +297,10 @@ public class TCPend {
                     handleNoConnection(tcpIn, packetIn);
                     break;
                 case HANDSHAKE:
-                    handleHandShake(tcpIn, packetIn);
+                    handleHandShake(tcpIn, packetIn, fileName);
                     break;
                 case DATA_TRANSFER:
-                    handleDataTransfer(tcpIn, packetIn);
+                    handleDataTransfer(tcpIn, packetIn, fw, bw);
                     break;
                 case FIN:
                     handleFin(tcpIn, packetIn);
