@@ -8,3 +8,4 @@ TCPpacket.class: TCPpacket.java
 
 clean: 
 	rm *.class
+	rm test*
