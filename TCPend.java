@@ -102,7 +102,6 @@ public class TCPend {
         byte[] payout2 = new String("world\n").getBytes();
         tcpOut = new TCPpacket(payout2);
         tcpOut.setSequenceNum(sequenceNum);
-        tcpOut = new TCPpacket(payout2);
         tcpOut.setLength(24 + payout2.length);
         byte[] out6 = tcpOut.serialize();
         packetOut = new DatagramPacket(out6, out6.length, outAddr, remotePort);
