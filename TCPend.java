@@ -224,7 +224,7 @@ public class TCPend {
     private static void writeToFile(byte[] payload) throws IOException {
         String payloadStr = new String(payload, 0, payload.length);
         System.out.println("About to write " + payloadStr + " to file");
-        bw.write(payloadStr, 0, payloadStr.length());
+        bw.write(payloadStr);
     }
 
     private static void handleDataTransfer(TCPpacket tcpIn, DatagramPacket packetIn) throws IOException {
