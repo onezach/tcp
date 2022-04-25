@@ -19,28 +19,28 @@ public class TCPpacket {
 
     // Constructors
     public TCPpacket() {
-        this.sequenceNum = 0;
-        this.ack = 0;
-        this.timeStamp = 0;
-        this.length = 0;
+        this.sequenceNum = -1;
+        this.ack = -1;
+        this.timeStamp = -1;
+        this.length = -1;
         this.synFlag = false;
         this.finFlag = false;
         this.ackFlag = false;
-        this.zeros = 0;
-        this.checksum = 0;
+        this.zeros = -1;
+        this.checksum = -1;
         this.payload = null;
     }
 
     public TCPpacket(byte[] payload) {
-        this.sequenceNum = 0;
-        this.ack = 0;
-        this.timeStamp = 0;
-        this.length = 0;
+        this.sequenceNum = -1;
+        this.ack = -1;
+        this.timeStamp = -1;
+        this.length = -1;
         this.synFlag = false;
         this.finFlag = false;
         this.ackFlag = false;
-        this.zeros = 0;
-        this.checksum = 0;
+        this.zeros = -1;
+        this.checksum = -1;
         this.payload = payload;
     }
 

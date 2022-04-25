@@ -96,7 +96,7 @@ public class TCPend {
         tcpIn = new TCPpacket();
         tcpIn.deserialize(packetIn.getData());
 
-        // verify that an ack flag is detected
+        // verify that a FIN flag is detected
         if (tcpIn.getFinFlag()) {
             inSeq = tcpIn.getSequenceNum();
             System.out.println("Sender received a FIN and sequence number " + tcpIn.getSequenceNum());
