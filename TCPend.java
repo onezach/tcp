@@ -76,7 +76,7 @@ public class TCPend {
         socket.send(packetOut);
 
         // ---------- DATA TRANSFER --------- // 
-        tcpOut = new TCPpacket((new String("Hello ").getBytes()));
+        tcpOut = new TCPpacket((new String("Hello ")).getBytes());
         tcpOut.setSequenceNum(sequenceNum);
         byte[] out5 = tcpOut.serialize();
         packetOut = new DatagramPacket(out5, out5.length, outAddr, remotePort);
@@ -97,7 +97,7 @@ public class TCPend {
             return;
         }
 
-        tcpOut = new TCPpacket((new String("world\n").getBytes()));
+        tcpOut = new TCPpacket((new String("world\n")).getBytes());
         tcpOut.setSequenceNum(sequenceNum);
         byte[] out6 = tcpOut.serialize();
         packetOut = new DatagramPacket(out6, out6.length, outAddr, remotePort);
