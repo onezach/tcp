@@ -25,42 +25,90 @@ public class TCPend {
     public static void sender(int port, String remoteIP, int remotePort, String fileName, int mtu, int sws) throws IOException {
         System.out.println("Starting Sender");
         byte[] buffer = new byte[1500];
+
+        int outSeq = 0;
+        int inSeq;
         
         socket = new DatagramSocket(port); // NOTE: sender cannot have same port number as reciever port if on same machine
         InetAddress outAddr = InetAddress.getByName(remoteIP);
 
-        String payLoad1 = "Hello world!";
-        byte[] payout = payLoad1.getBytes();
-
+        // ----------  HANDSHAKE --------- //
         // need only set necessary fields
         tcpOut = new TCPpacket();
-        tcpOut.setSequenceNum(0);
+        tcpOut.setSequenceNum(outSeq);
         tcpOut.setSynFlag(true);
-        tcpOut.setPayload(payout);
-
         byte[] out = tcpOut.serialize();
-
         packetOut = new DatagramPacket(out, out.length, outAddr, remotePort);
         socket.send(packetOut);
+        outSeq++;
 
         // response back from receiver
         packetIn = new DatagramPacket(buffer, buffer.length);
         socket.receive(packetIn);
         tcpIn = new TCPpacket();
         tcpIn.deserialize(packetIn.getData());
-        // print payload
-        System.out.println(new String(tcpIn.getPayload(), 0, tcpIn.getPayload().length));
+
         // verify that an ack flag is detected
-        if (tcpIn.getAckFlag()) {
+        if (tcpIn.getAckFlag() && tcpIn.getSynFlag()) {
+            inSeq = tcpIn.getSequenceNum();
             System.out.println("Sender received sequence number " + tcpIn.getSequenceNum() + " and ack number " + tcpIn.getAck());
+        } else {
+            System.out.println("Sender didn't receive a SYN/ACK");
+            return;
         }
+
+        // send an ack
+        tcpOut = new TCPpacket();
+        tcpOut.setAckFlag(true);
+        tcpOut.setAck(inSeq + 1);
+        byte[] out2 = tcpOut.serialize();
+        packetOut = new DatagramPacket(out2, out2.length, outAddr, remotePort);
+        socket.send(packetOut);
 
         // send FIN to receiver
         tcpOut = new TCPpacket();
         tcpOut.setFinFlag(true);
-        byte[] out2 = tcpOut.serialize();
+        tcpOut.setSequenceNum(outSeq);
+        byte[] out3 = tcpOut.serialize();
+        packetOut = new DatagramPacket(out3, out3.length, outAddr, remotePort);
+        socket.send(packetOut);
+        outSeq++;
 
-        packetOut = new DatagramPacket(out2, out2.length, outAddr, remotePort);
+        // response back from receiver
+        packetIn = new DatagramPacket(buffer, buffer.length);
+        socket.receive(packetIn);
+        tcpIn = new TCPpacket();
+        tcpIn.deserialize(packetIn.getData());
+
+        // verify that an ack flag is detected
+        if (tcpIn.getAckFlag()) {
+            System.out.println("Sender received ack number " + tcpIn.getAck());
+        } else {
+            System.out.println("Sender didn't receive an before the FIN");
+            return;
+        }
+
+        // response back from receiver
+        packetIn = new DatagramPacket(buffer, buffer.length);
+        socket.receive(packetIn);
+        tcpIn = new TCPpacket();
+        tcpIn.deserialize(packetIn.getData());
+
+        // verify that an ack flag is detected
+        if (tcpIn.getFinFlag()) {
+            inSeq = tcpIn.getSequenceNum();
+            System.out.println("Sender received a FIN and sequence number " + tcpIn.getSequenceNum());
+        } else {
+            System.out.println("Sender didn't receive a FIN");
+            return;
+        }
+
+        // send an ack
+        tcpOut = new TCPpacket();
+        tcpOut.setAckFlag(true);
+        tcpOut.setAck(inSeq + 1);
+        byte[] out4 = tcpOut.serialize();
+        packetOut = new DatagramPacket(out4, out4.length, outAddr, remotePort);
         socket.send(packetOut);
 
         socket.close();
