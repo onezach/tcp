@@ -222,7 +222,9 @@ public class TCPend {
     }
 
     private static void writeToFile(byte[] payload) throws IOException {
+        System.out.println("byte[] len = " + payload.length);
         String payloadStr = new String(payload, 0, payload.length);
+        System.out.println("payloadStr len = " + payloadStr.length());
         System.out.println("About to write " + payloadStr + " to file");
         bw.write(payloadStr);
     }
