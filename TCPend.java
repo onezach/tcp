@@ -223,12 +223,13 @@ public class TCPend {
         stage = Stage.DATA_TRANSFER;
     }
 
-    private static void writeToFile(FileWriter fw, BufferedWriter bw, byte[] payload) throws IOException {
+    private static void writeToFile(byte[] payload) throws IOException {
         String payloadStr = new String(payload, 0, payload.length);
+        System.out.println("About to write " + payloadStr + " to file");
         bw.write(payloadStr, 0, payloadStr.length());
     }
 
-    private static void handleDataTransfer(TCPpacket tcpIn, DatagramPacket packetIn, FileWriter fw, BufferedWriter bw) throws IOException {
+    private static void handleDataTransfer(TCPpacket tcpIn, DatagramPacket packetIn) throws IOException {
         // check if next packet is next contigous
         if (tcpIn.getSequenceNum() != expectedSeqNum){
             System.out.println("Error: wrong sequence number recieved in data_transfer stage, dropping packet");
@@ -240,7 +241,7 @@ public class TCPend {
         expectedSeqNum++;
 
         // write packet to file
-        writeToFile(fw, bw, tcpIn.getPayload());
+        writeToFile(tcpIn.getPayload());
 
         // create TCP packet to send ACK
         tcpOut = new TCPpacket();
@@ -309,6 +310,7 @@ public class TCPend {
         System.out.println("Sending FIN for fin");
 
         stage = Stage.CONNECTION_TERMINATED;
+        bw.close();
 
 
 
@@ -346,7 +348,7 @@ public class TCPend {
                     handleHandShake(tcpIn, packetIn, fileName);
                     break;
                 case DATA_TRANSFER:
-                    handleDataTransfer(tcpIn, packetIn, fw, bw);
+                    handleDataTransfer(tcpIn, packetIn);
                     break;
                 case FIN:
                     handleFin(tcpIn, packetIn);
