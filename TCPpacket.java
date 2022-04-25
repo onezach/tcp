@@ -1,3 +1,4 @@
+import java.net.DatagramPacket;
 import java.nio.ByteBuffer;
 
 public class TCPpacket {
@@ -16,20 +17,10 @@ public class TCPpacket {
     // constants and other attributes
     private static final int MAX_DATA_LEN = 1446;
 
-    // Constructor
+    // Constructors
     public TCPpacket() {
-        this.sequenceNum = 0;
-        this.ack = 0;
-        this.timeStamp = 0;
-        this.length = 0;
-        this.synFlag = false;
-        this.finFlag = false;
-        this.ackFlag = false;
         this.zeros = 0;
-        this.checksum = 0;
-        this.payload = null;
     }
-
 
     public TCPpacket(byte[] payload) {
         this.payload = payload;
@@ -38,6 +29,10 @@ public class TCPpacket {
 
     // Setters
     public void setPayload(byte[] payload) {
+        if (payload.length > MAX_DATA_LEN){
+            System.out.println("Error: Payload bigger than max allowed (1446)");
+            return;
+        }
         this.payload = payload;
     }
     public void setSequenceNum(int sequenceNum) {
@@ -213,10 +208,9 @@ public class TCPpacket {
         str+= "zeros: " + this.zeros + "\n";
         str+= "checksum: " + this.checksum + "\n";
         if (this.payload != null) {
-            System.out.println("BAM");
             System.out.println(this.payload.length - 21);
             str+= "payLoad length: " + this.payload.length + "\n";
-            if (this.payload.length > 20){
+            if (this.payload.length > 40){
                 str+= "first 20 characters: " + new String(this.payload, 0, 20) + "\n";
                 str+= "last 20 characters: " + new String(this.payload, this.payload.length - 20, 20) + "\n";
             }

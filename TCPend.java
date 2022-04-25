@@ -3,6 +3,14 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 
+enum Stage {
+    NO_CONNECTION,
+    HANDSHAKE,
+    DATA_TRANSFER,
+    FIN,
+    CONNECTION_TERMINATED
+}
+
 public class TCPend {
 
     public static DatagramSocket socket;
@@ -10,6 +18,9 @@ public class TCPend {
     public static DatagramPacket packetOut;
     public static TCPpacket tcpIn;
     public static TCPpacket tcpOut;
+    public static Stage stage;
+    public static int expectedAck;
+
     
     public static void sender(int port, String remoteIP, int remotePort, String fileName, int mtu, int sws) throws IOException {
         System.out.println("Starting Sender");
@@ -55,54 +66,157 @@ public class TCPend {
         socket.close();
     }
 
+    private static void handleNoConnection(TCPpacket tcpIn, DatagramPacket packetIn) throws IOException {
+        // check if initial message is handhsake starter
+        if (!tcpIn.getSynFlag()) {
+            System.out.println("Error: recieved packet in stage NO_CONNECTION without a syn flag");
+            // Drop Packet
+            return;
+        }
+        
+        // print recieved
+        System.out.println("Receiver got a syn");
+        String payload = "got seq num:"  + tcpIn.getSequenceNum();
+
+        // create TCP packet out
+        tcpOut = new TCPpacket();
+        int sequenceNum = 100;
+        tcpOut.setSequenceNum(sequenceNum);
+        tcpOut.setAck(tcpIn.getSequenceNum() + 1);
+        tcpOut.setAckFlag(true);
+
+        // serialize
+        byte[] out = tcpOut.serialize();
+
+        // get information on sender so that we can send packets back
+        int senderPort = packetIn.getPort();
+        InetAddress senderAddress = packetIn.getAddress();
+        
+        // create Datagram out
+        packetOut = new DatagramPacket(out, out.length, senderAddress, senderPort);
+        
+        // send packet
+        socket.send(packetOut);
+
+        // update
+        stage = Stage.HANDSHAKE;
+        expectedAck = sequenceNum + 1;
+    }
+
+    private static void handleHandShake(TCPpacket tcpIn, DatagramPacket packetIn) throws IOException {
+        // check if initial message is handhsake starter
+        if (!tcpIn.getAckFlag() || tcpIn.getAck() != expectedAck) {
+            System.out.println("Error: recieved packet in stage Hnadshake without ack or wrong ack");
+            // Drop Packet
+            return;
+        }
+        
+        // print recieved
+        System.out.println("Receiver got ack to complete 3-way handshake");
+        System.out.println("ack = " + tcpIn.getAck());
+
+        // update current stage
+        stage = Stage.DATA_TRANSFER;
+        expectedAck++;
+    }
+
+    private static void handleDataTransfer(TCPpacket tcpIn, DatagramPacket packetIn) throws IOException {
+
+    }
+
+    private static void handleFin(TCPpacket tcpIn, DatagramPacket packetIn) throws IOException {
+        System.out.println("FIN recived, begin connection termination");
+        // create TCP packet to send ACK
+        tcpOut = new TCPpacket();
+        tcpOut.setAck(tcpIn.getSequenceNum() + 1);
+        tcpOut.setAckFlag(true);
+
+        // serialize
+        byte[] out = tcpOut.serialize();
+
+        // get information on sender so that we can send packets back
+        int senderPort = packetIn.getPort();
+        InetAddress senderAddress = packetIn.getAddress();
+        
+        // create Datagram out
+        packetOut = new DatagramPacket(out, out.length, senderAddress, senderPort);
+        
+        // send ACK
+        socket.send(packetOut);
+        System.out.println("Sending ACK for fin");
+
+        ///////////////////////////////////////////
+        // This is where reciever would clean up any loose ends before sending fin if we were actually doing that
+        ///////////////////////////////////////////
+
+        // create TCP packet to send FIN
+        tcpOut = new TCPpacket();
+        tcpOut.setFinFlag(true);
+        //tcpOut.setSequenceNum(); need to keep track of our seq
+
+
+        // serialize
+        out = tcpOut.serialize();
+
+        // get information on sender so that we can send packets back
+        senderPort = packetIn.getPort();
+        senderAddress = packetIn.getAddress();
+        
+        // create Datagram out
+        packetOut = new DatagramPacket(out, out.length, senderAddress, senderPort);
+        
+        // send ACK
+        socket.send(packetOut);
+        System.out.println("Sending FIN for fin");
+
+        stage = Stage.CONNECTION_TERMINATED;
+
+
+
+ 
+    }
+
     public static void receiver(int port, int mtu, int sws, String fileName) throws IOException {
         System.out.println("Starting Reciever");
-
+        stage = Stage.NO_CONNECTION;
         socket = new DatagramSocket(port);
 
         while (true) {
-            // receive packet
-            byte[] buffer = new byte[1500];
-            packetIn = new DatagramPacket(buffer, buffer.length);
-            socket.receive(packetIn);
-
-            tcpIn = new TCPpacket();
-            tcpIn.deserialize(packetIn.getData());
-            // get information on sender so that we can send packets back
-            int senderPort = packetIn.getPort();
-            InetAddress senderAddress = packetIn.getAddress();
+             // receive packet
+             byte[] buffer = new byte[1472];
+             packetIn = new DatagramPacket(buffer, buffer.length);
+             socket.receive(packetIn);
+ 
+             tcpIn = new TCPpacket();
+             tcpIn.deserialize(packetIn.getData());
             
-            // print payload of incoming packet
-            System.out.println(new String(tcpIn.getPayload(), 0, tcpIn.getPayload().length));
-
-            // handle SYN
-            if (tcpIn.getSynFlag()) { 
-                System.out.println("Receiver got a syn");
-                String payload = "got seq num:"  + tcpIn.getSequenceNum();
-                byte[] payout = payload.getBytes();
-
-                tcpOut = new TCPpacket();
-                tcpOut.setSequenceNum(100);
-                tcpOut.setAck(tcpIn.getAck() + 1);
-                tcpOut.setAckFlag(true);
-                tcpOut.setPayload(payout);
-
-                byte[] out = tcpOut.serialize();
-
-                packetOut = new DatagramPacket(out, out.length, senderAddress, senderPort);
-                socket.send(packetOut);
-
+             // check if need to end connection
+             if (tcpIn.getFinFlag() && stage == Stage.DATA_TRANSFER)
+                stage = Stage.FIN;
+            
+            // handle packet
+            switch(stage){
+                case NO_CONNECTION:
+                    handleNoConnection(tcpIn, packetIn);
+                    break;
+                case HANDSHAKE:
+                    handleHandShake(tcpIn, packetIn);
+                    break;
+                case DATA_TRANSFER:
+                    handleDataTransfer(tcpIn, packetIn);
+                    break;
+                case FIN:
+                    handleFin(tcpIn, packetIn);
+                    break;
+                case CONNECTION_TERMINATED:
+                    break;
             }
-
-            // handle FIN
-            if (tcpIn.getFinFlag()) {
-                System.out.println("Receiver got a fin");
+            if (stage == Stage.CONNECTION_TERMINATED)
                 break;
-            }            
         }
         System.out.println("Receiver closing...");
         socket.close();
-    }
+    }   
 
     public static void main(String[] args) {
         if (args.length == 12) {
