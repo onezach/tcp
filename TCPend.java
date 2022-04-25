@@ -30,7 +30,6 @@ public class TCPend {
         byte[] buffer = new byte[1472];
 
         sequenceNum = 0;
-        int inSeq;
         
         socket = new DatagramSocket(port); // NOTE: sender cannot have same port number as reciever port if on same machine
         InetAddress outAddr = InetAddress.getByName(remoteIP);
@@ -54,7 +53,7 @@ public class TCPend {
 
         // verify that an ack flag is detected
         if (tcpIn.getAckFlag() && tcpIn.getSynFlag()) {
-            inSeq = tcpIn.getSequenceNum();
+            // inSeq = tcpIn.getSequenceNum();
             System.out.println("Sender received sequence number " + tcpIn.getSequenceNum() + " and ack number " + tcpIn.getAck());
         } else {
             System.out.println("Sender didn't receive a SYN/ACK");
@@ -64,8 +63,8 @@ public class TCPend {
         // send an ack
         tcpOut = new TCPpacket();
         tcpOut.setAckFlag(true);
-        tcpOut.setAck(inSeq + 1);
-        System.out.println("Sender sends ack " + (inSeq + 1));
+        tcpOut.setAck(tcpIn.getSequenceNum() + 1);
+        System.out.println("Sender sends ack " + (tcpIn.getSequenceNum() + 1));
         byte[] out2 = tcpOut.serialize();
         packetOut = new DatagramPacket(out2, out2.length, outAddr, remotePort);
         socket.send(packetOut);
@@ -144,7 +143,6 @@ public class TCPend {
 
         // verify that a FIN flag is detected
         if (tcpIn.getFinFlag()) {
-            inSeq = tcpIn.getSequenceNum();
             System.out.println("Sender received a FIN and sequence number " + tcpIn.getSequenceNum());
         } else {
             System.out.println("Sender didn't receive a FIN");
@@ -154,7 +152,7 @@ public class TCPend {
         // send an ack
         tcpOut = new TCPpacket();
         tcpOut.setAckFlag(true);
-        tcpOut.setAck(inSeq + 1);
+        tcpOut.setAck(tcpIn.getSequenceNum() + 1);
         byte[] out4 = tcpOut.serialize();
         packetOut = new DatagramPacket(out4, out4.length, outAddr, remotePort);
         socket.send(packetOut);
