@@ -228,6 +228,7 @@ public class TCPend {
         // create TCP packet to send FIN
         tcpOut = new TCPpacket();
         tcpOut.setFinFlag(true);
+        tcpOut.setSequenceNum(sequenceNum);
         //tcpOut.setSequenceNum(); need to keep track of our seq
 
 
