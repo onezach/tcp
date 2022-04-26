@@ -22,7 +22,7 @@ public class TCPpacket {
         this.sequenceNum = -1;
         this.ack = -1;
         this.timeStamp = -1;
-        this.length = -1;
+        this.length = 0;
         this.synFlag = false;
         this.finFlag = false;
         this.ackFlag = false;
@@ -35,7 +35,7 @@ public class TCPpacket {
         this.sequenceNum = -1;
         this.ack = -1;
         this.timeStamp = -1;
-        this.length = -1;
+        this.length = 0;
         this.synFlag = false;
         this.finFlag = false;
         this.ackFlag = false;
@@ -202,9 +202,9 @@ public class TCPpacket {
         this.checksum = bb.getShort();
 
         // if payload exists, add
-        if (this.length > 24) {
-            this.payload = new byte[this.length - 24];
-            for (int i = 0; i < this.length - 24; i++) {
+        if (this.length > 0) {
+            this.payload = new byte[this.length];
+            for (int i = 0; i < this.length; i++) {
                 byte b = bb.get();
                 this.payload[i] = b;
             }

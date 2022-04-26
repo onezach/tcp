@@ -35,55 +35,34 @@ public class TCPend extends Thread {
     public static BufferedReader br;
     public static BufferedWriter bw;
     public static byte[] buffer;
-    public static Queue<byte[]> toSend;
+    public static Queue<TCPpacket> toSend;
     public static InetAddress outAddr;
     public static int rPort;
 
 
-    // public class Threader extends Thread {
-        
-    //     private void send() {
-    //         while (stage != Stage.CONNECTION_TERMINATED) {
-    //             if (toSend.size() > 0) {
-    //                 try {
-    //                     byte[] out = toSend.remove();
-    //                     packetOut = new DatagramPacket(out, out.length, outAddr, rPort);
-    //                     socket.send(packetOut);
-    //                     sequenceNum += out.length;
-    //                     return;
-    //                 } catch (IOException e) {
-    //                     System.out.println("Error in send");
-    //                     // return;
-    //                 }
-                    
-    //             }
-    //         }
-    //     }
-        
-    //     public void run() {
-    //         send();
-    //     }
-    // }
-
     public void run() {
-        send();
-    }
-
-    private static void send() {
         while (stage != Stage.NO_CONNECTION && stage != Stage.CONNECTION_TERMINATED) {
             if (toSend.size() > 0) {
+                System.out.println("Identified");
                 try {
-                    byte[] out = toSend.remove();
-                    packetOut = new DatagramPacket(out, out.length, outAddr, rPort);
+                    TCPpacket out = toSend.remove();
+                    byte[] outArr = out.serialize();
+                    packetOut = new DatagramPacket(outArr, outArr.length, outAddr, rPort);
                     socket.send(packetOut);
-                    sequenceNum += out.length;
+                    System.out.println("Sender sends packet");
+                    if (out.getLength() == 0) {
+                        sequenceNum++;
+                    } else {
+                        sequenceNum = sequenceNum + out.getLength();
+                    }
+                    
                     // return;
                 } catch (IOException e) {
                     System.out.println("Error in send");
                     // return;
                 }
-                
             }
+            Thread.yield();
         }
     }
 
@@ -95,21 +74,14 @@ public class TCPend extends Thread {
         // fr = new FileReader(inFile);
         // br = new BufferedReader(br);
         
-
         socket = new DatagramSocket(port); // NOTE: sender cannot have same port number as reciever port if on same machine
-        
         outAddr = InetAddress.getByName(remoteIP);
         rPort = remotePort;
 
         sequenceNum = 0;
 
         toSend = new LinkedList<>();
-        // int fullPackets = (int) (inFile.length() / 1448);
-        // int partialPacketLength = (int) (inFile.length() % 1448);
-        // for (int i = 0; i < fullPackets; i++) {
-        //     char[] cbuf = new char[]
-        //     br.read
-        // }
+
         (new TCPend()).start();
         
         // ----------  HANDSHAKE --------- //
@@ -118,8 +90,7 @@ public class TCPend extends Thread {
         tcpOut = new TCPpacket();
         tcpOut.setSequenceNum(sequenceNum);
         tcpOut.setSynFlag(true);
-
-        toSend.add(tcpOut.serialize());
+        toSend.add(tcpOut);
         // send();
         // byte[] out = tcpOut.serialize();
         // packetOut = new DatagramPacket(out, out.length, outAddr, remotePort);
@@ -146,7 +117,7 @@ public class TCPend extends Thread {
         tcpOut.setAckFlag(true);
         tcpOut.setAck(tcpIn.getSequenceNum() + 1);
         System.out.println("Sender sends ack " + (tcpIn.getSequenceNum() + 1));
-        toSend.add(tcpOut.serialize());
+        toSend.add(tcpOut);
         // send();
         // byte[] out2 = tcpOut.serialize();
         // packetOut = new DatagramPacket(out2, out2.length, outAddr, remotePort);
@@ -156,11 +127,11 @@ public class TCPend extends Thread {
         byte[] payout = new String("Hello ").getBytes();
         tcpOut = new TCPpacket(payout);
         tcpOut.setSequenceNum(sequenceNum);
-        tcpOut.setLength(24 + payout.length);
+        tcpOut.setLength(payout.length);
         byte[] out5 = tcpOut.serialize();
         packetOut = new DatagramPacket(out5, out5.length, outAddr, remotePort);
         socket.send(packetOut);
-        sequenceNum += out5.length;
+        sequenceNum += payout.length;
 
         // response back from receiver
         packetIn = new DatagramPacket(buffer, buffer.length);
@@ -179,11 +150,11 @@ public class TCPend extends Thread {
         byte[] payout2 = new String("world\n").getBytes();
         tcpOut = new TCPpacket(payout2);
         tcpOut.setSequenceNum(sequenceNum);
-        tcpOut.setLength(24 + payout2.length);
+        tcpOut.setLength(payout2.length);
         byte[] out6 = tcpOut.serialize();
         packetOut = new DatagramPacket(out6, out6.length, outAddr, remotePort);
         socket.send(packetOut);
-        sequenceNum += out6.length;
+        sequenceNum += payout2.length;
 
         // response back from receiver
         packetIn = new DatagramPacket(buffer, buffer.length);
@@ -206,7 +177,7 @@ public class TCPend extends Thread {
         byte[] out3 = tcpOut.serialize();
         packetOut = new DatagramPacket(out3, out3.length, outAddr, remotePort);
         socket.send(packetOut);
-        sequenceNum += out3.length;
+        sequenceNum += 1;
 
         // response back from receiver
         packetIn = new DatagramPacket(buffer, buffer.length);
@@ -243,6 +214,7 @@ public class TCPend extends Thread {
         byte[] out4 = tcpOut.serialize();
         packetOut = new DatagramPacket(out4, out4.length, outAddr, remotePort);
         socket.send(packetOut);
+        sequenceNum++;
 
         socket.close();
         stage = Stage.CONNECTION_TERMINATED;
@@ -284,14 +256,14 @@ public class TCPend extends Thread {
 
         // update
         stage = Stage.HANDSHAKE;
-        expectedSeqNum = tcpOut.getAck();
+        expectedSeqNum = tcpIn.getSequenceNum() + tcpIn.getLength();
         sequenceNum++;
     }
 
     private static void handleHandShake(TCPpacket tcpIn, DatagramPacket packetIn, String fileName) throws IOException {
         // check if initial message is handhsake starter
-        if (!tcpIn.getAckFlag() || tcpIn.getAck() != expectedSeqNum) {
-            System.out.println("Error: recieved packet in stage Hnadshake without ack or wrong ack");
+        if (!tcpIn.getAckFlag() || tcpIn.getAck() != sequenceNum) {
+            System.out.println("Error: recieved packet in stage Hnadshake without ack or wrong ack (" + tcpIn.getAck() + ")" + sequenceNum);
             // Drop Packet
             return;
         }
