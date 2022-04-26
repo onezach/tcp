@@ -1,10 +1,14 @@
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.util.LinkedList;
+import java.util.Queue;
 
 enum Stage {
     NO_CONNECTION,
@@ -14,7 +18,7 @@ enum Stage {
     CONNECTION_TERMINATED
 }
 
-public class TCPend {
+public class TCPend extends Thread {
 
     public static DatagramSocket socket;
     public static DatagramPacket packetIn;
@@ -24,32 +28,103 @@ public class TCPend {
     public static Stage stage;
     public static int sequenceNum;
     public static int expectedSeqNum;
+    public static File inFile;
     public static File outFile;
+    public static FileReader fr;
     public static FileWriter fw;
+    public static BufferedReader br;
     public static BufferedWriter bw;
+    public static byte[] buffer;
+    public static Queue<byte[]> toSend;
+    public static InetAddress outAddr;
+    public static int rPort;
 
-    
 
+    // public class Threader extends Thread {
+        
+    //     private void send() {
+    //         while (stage != Stage.CONNECTION_TERMINATED) {
+    //             if (toSend.size() > 0) {
+    //                 try {
+    //                     byte[] out = toSend.remove();
+    //                     packetOut = new DatagramPacket(out, out.length, outAddr, rPort);
+    //                     socket.send(packetOut);
+    //                     sequenceNum += out.length;
+    //                     return;
+    //                 } catch (IOException e) {
+    //                     System.out.println("Error in send");
+    //                     // return;
+    //                 }
+                    
+    //             }
+    //         }
+    //     }
+        
+    //     public void run() {
+    //         send();
+    //     }
+    // }
+
+    public void run() {
+        send();
+    }
+
+    private static void send() {
+        while (stage != Stage.NO_CONNECTION && stage != Stage.CONNECTION_TERMINATED) {
+            if (toSend.size() > 0) {
+                try {
+                    byte[] out = toSend.remove();
+                    packetOut = new DatagramPacket(out, out.length, outAddr, rPort);
+                    socket.send(packetOut);
+                    sequenceNum += out.length;
+                    // return;
+                } catch (IOException e) {
+                    System.out.println("Error in send");
+                    // return;
+                }
+                
+            }
+        }
+    }
 
     public static void sender(int port, String remoteIP, int remotePort, String fileName, int mtu, int sws) throws IOException {
-        System.out.println("Starting Sender");
-        byte[] buffer = new byte[1472];
+        System.out.println("Starting Sender"); 
+        buffer = new byte[1472]; // -------------- TO CHANGE --------------
+        stage = Stage.NO_CONNECTION;
+        // inFile = new File(fileName);
+        // fr = new FileReader(inFile);
+        // br = new BufferedReader(br);
+        
+
+        socket = new DatagramSocket(port); // NOTE: sender cannot have same port number as reciever port if on same machine
+        
+        outAddr = InetAddress.getByName(remoteIP);
+        rPort = remotePort;
 
         sequenceNum = 0;
-        
-        socket = new DatagramSocket(port); // NOTE: sender cannot have same port number as reciever port if on same machine
-        InetAddress outAddr = InetAddress.getByName(remoteIP);
 
+        toSend = new LinkedList<>();
+        // int fullPackets = (int) (inFile.length() / 1448);
+        // int partialPacketLength = (int) (inFile.length() % 1448);
+        // for (int i = 0; i < fullPackets; i++) {
+        //     char[] cbuf = new char[]
+        //     br.read
+        // }
+        (new TCPend()).start();
+        
         // ----------  HANDSHAKE --------- //
         stage = Stage.HANDSHAKE;
         // need only set necessary fields
         tcpOut = new TCPpacket();
         tcpOut.setSequenceNum(sequenceNum);
         tcpOut.setSynFlag(true);
-        byte[] out = tcpOut.serialize();
-        packetOut = new DatagramPacket(out, out.length, outAddr, remotePort);
-        socket.send(packetOut);
-        sequenceNum++; // 1
+
+        toSend.add(tcpOut.serialize());
+        // send();
+        // byte[] out = tcpOut.serialize();
+        // packetOut = new DatagramPacket(out, out.length, outAddr, remotePort);
+        // socket.send(packetOut);
+        // sequenceNum += out.length; // 1
 
         // response back from receiver
         packetIn = new DatagramPacket(buffer, buffer.length);
@@ -71,9 +146,11 @@ public class TCPend {
         tcpOut.setAckFlag(true);
         tcpOut.setAck(tcpIn.getSequenceNum() + 1);
         System.out.println("Sender sends ack " + (tcpIn.getSequenceNum() + 1));
-        byte[] out2 = tcpOut.serialize();
-        packetOut = new DatagramPacket(out2, out2.length, outAddr, remotePort);
-        socket.send(packetOut);
+        toSend.add(tcpOut.serialize());
+        // send();
+        // byte[] out2 = tcpOut.serialize();
+        // packetOut = new DatagramPacket(out2, out2.length, outAddr, remotePort);
+        // socket.send(packetOut);
 
         // ---------- DATA TRANSFER --------- // 
         byte[] payout = new String("Hello ").getBytes();
@@ -83,7 +160,7 @@ public class TCPend {
         byte[] out5 = tcpOut.serialize();
         packetOut = new DatagramPacket(out5, out5.length, outAddr, remotePort);
         socket.send(packetOut);
-        sequenceNum++;
+        sequenceNum += out5.length;
 
         // response back from receiver
         packetIn = new DatagramPacket(buffer, buffer.length);
@@ -106,7 +183,7 @@ public class TCPend {
         byte[] out6 = tcpOut.serialize();
         packetOut = new DatagramPacket(out6, out6.length, outAddr, remotePort);
         socket.send(packetOut);
-        sequenceNum++;
+        sequenceNum += out6.length;
 
         // response back from receiver
         packetIn = new DatagramPacket(buffer, buffer.length);
@@ -129,7 +206,7 @@ public class TCPend {
         byte[] out3 = tcpOut.serialize();
         packetOut = new DatagramPacket(out3, out3.length, outAddr, remotePort);
         socket.send(packetOut);
-        sequenceNum++;
+        sequenceNum += out3.length;
 
         // response back from receiver
         packetIn = new DatagramPacket(buffer, buffer.length);
@@ -168,6 +245,7 @@ public class TCPend {
         socket.send(packetOut);
 
         socket.close();
+        stage = Stage.CONNECTION_TERMINATED;
     }
 
     private static void handleNoConnection(TCPpacket tcpIn, DatagramPacket packetIn) throws IOException {
