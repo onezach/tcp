@@ -248,6 +248,10 @@ public class TCPend extends Thread {
         stage = Stage.CONNECTION_TERMINATED;
     }
 
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////// RECEIVER CODE /////////////////////////////////////////////////////////////////////////////////////////////////
+    //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
     private static void handleNoConnection(TCPpacket tcpIn, DatagramPacket packetIn) throws IOException {
         // check if initial message is handhsake starter
         if (!tcpIn.getSynFlag()) {
@@ -258,11 +262,10 @@ public class TCPend extends Thread {
         
         // print recieved
         System.out.println("Receiver got a syn");
-        String payload = "got seq num:"  + tcpIn.getSequenceNum();
 
         // create TCP packet out
         tcpOut = new TCPpacket();
-        sequenceNum = 100;
+        sequenceNum = 0;
         tcpOut.setSequenceNum(sequenceNum);
         tcpOut.setSynFlag(true);
         tcpOut.setAck(tcpIn.getSequenceNum() + 1);
@@ -275,10 +278,8 @@ public class TCPend extends Thread {
         int senderPort = packetIn.getPort();
         InetAddress senderAddress = packetIn.getAddress();
         
-        // create Datagram out
+        // create Datagram out and send
         packetOut = new DatagramPacket(out, out.length, senderAddress, senderPort);
-        
-        // send packet
         socket.send(packetOut);
 
         // update
@@ -289,7 +290,7 @@ public class TCPend extends Thread {
 
     private static void handleHandShake(TCPpacket tcpIn, DatagramPacket packetIn, String fileName) throws IOException {
         // check if initial message is handhsake starter
-        if (!tcpIn.getAckFlag() || tcpIn.getAck() != sequenceNum) {
+        if (!tcpIn.getAckFlag() || tcpIn.getAck() != expectedSeqNum) {
             System.out.println("Error: recieved packet in stage Hnadshake without ack or wrong ack");
             // Drop Packet
             return;
@@ -297,17 +298,14 @@ public class TCPend extends Thread {
         
         // print recieved
         System.out.println("Receiver got ack to complete 3-way handshake");
-        System.out.println("ack = " + tcpIn.getAck());
 
         // update current stage
         stage = Stage.DATA_TRANSFER;
     }
 
     private static void writeToFile(byte[] payload) throws IOException {
-        System.out.println("byte[] len = " + payload.length);
         String payloadStr = new String(payload, 0, payload.length);
-        System.out.println("payloadStr len = " + payloadStr.length());
-        System.out.println("About to write " + payloadStr + " to file");
+        System.out.println("writing to file");
         bw.write(payloadStr);
     }
 
@@ -315,19 +313,20 @@ public class TCPend extends Thread {
         // check if next packet is next contigous
         if (tcpIn.getSequenceNum() != expectedSeqNum){
             System.out.println("Error: wrong sequence number recieved in data_transfer stage, dropping packet");
+            System.out.println("expxted: " + expectedSeqNum);
+            System.out.println("got: " + tcpIn.getSequenceNum());
         }
 
         System.out.println("Succesfully recived data packet");
-        System.out.println("packet:\n" + new String(tcpIn.getPayload(), 0, tcpIn.getPayload().length));
 
-        expectedSeqNum++;
+        expectedSeqNum += tcpIn.getLength() + 1;
 
         // write packet to file
         writeToFile(tcpIn.getPayload());
 
         // create TCP packet to send ACK
         tcpOut = new TCPpacket();
-        tcpOut.setAck(tcpIn.getSequenceNum() + 1);
+        tcpOut.setAck(tcpIn.getSequenceNum() + tcpIn.getLength() + 1);
         tcpOut.setAckFlag(true);
 
         // serialize
