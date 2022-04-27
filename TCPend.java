@@ -480,7 +480,7 @@ public class TCPend {
         outFile = new File(fileName);
         fw = new FileWriter(outFile);
         bw = new BufferedWriter(fw);
-        recieverBuffer = new PriorityQueue<TCPpacket>(sws);
+        recieverBuffer = new PriorityQueue<TCPpacket>();
         
         socket = new DatagramSocket(port);
 
