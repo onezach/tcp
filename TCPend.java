@@ -29,6 +29,7 @@ public class TCPend extends Thread {
     public static Stage stage;
     public static int sequenceNum;
     public static int expectedSeqNum;
+    public static int curAck;
     public static File inFile;
     public static File outFile;
     public static FileReader fr;
@@ -44,6 +45,11 @@ public class TCPend extends Thread {
 
     public void run() {
         while (stage != Stage.NO_CONNECTION && stage != Stage.CONNECTION_TERMINATED) {
+
+
+            // ---------   RETRANSMISSION AND SUCH --------- //
+
+
             if (toSend.size() > 0) {
                 System.out.println("Identified");
                 try {
@@ -52,20 +58,32 @@ public class TCPend extends Thread {
                     packetOut = new DatagramPacket(outArr, outArr.length, outAddr, rPort);
                     socket.send(packetOut);
                     System.out.println("Sender sends packet");
-                    if (out.getLength() == 0) {
+
+                    if (out.getSynFlag()) {
                         sequenceNum++;
-                    } else {
-                        sequenceNum = sequenceNum + out.getLength();
+                    } 
+                    else { // all others have an ACK flag
+                        if (!out.getFinFlag()) {
+                            if (out.getLength() > 0) {
+                                sequenceNum = sequenceNum + out.getLength();
+                            } else {
+                                continue; // just an ACK with no data
+                            }
+                        } else {
+                            sequenceNum++;
+                        }
                     }
-                    
-                    // return;
                 } catch (IOException e) {
                     System.out.println("Error in send");
-                    // return;
                 }
             }
-            Thread.yield();
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
+        System.out.println("End of run");
     }
 
     public static void sender(int port, String remoteIP, int remotePort, String fileName, int mtu, int sws) throws IOException {
@@ -93,11 +111,6 @@ public class TCPend extends Thread {
         tcpOut.setSequenceNum(sequenceNum);
         tcpOut.setSynFlag(true);
         toSend.add(tcpOut);
-        // send();
-        // byte[] out = tcpOut.serialize();
-        // packetOut = new DatagramPacket(out, out.length, outAddr, remotePort);
-        // socket.send(packetOut);
-        // sequenceNum += out.length; // 1
 
         // response back from receiver
         packetIn = new DatagramPacket(buffer, buffer.length);
@@ -108,6 +121,7 @@ public class TCPend extends Thread {
         // verify that an ack flag is detected
         if (tcpIn.getAckFlag() && tcpIn.getSynFlag()) {
             // inSeq = tcpIn.getSequenceNum();
+            curAck = tcpIn.getSequenceNum() + 1;
             System.out.println("Sender received sequence number " + tcpIn.getSequenceNum() + " and ack number " + tcpIn.getAck());
         } else {
             System.out.println("Sender didn't receive a SYN/ACK");
@@ -117,23 +131,18 @@ public class TCPend extends Thread {
         // send an ack
         tcpOut = new TCPpacket();
         tcpOut.setAckFlag(true);
-        tcpOut.setAck(tcpIn.getSequenceNum() + 1);
-        System.out.println("Sender sends ack " + (tcpIn.getSequenceNum() + 1));
+        tcpOut.setAck(curAck);
+        System.out.println("Sender sends ack " + curAck);
         toSend.add(tcpOut);
-        // send();
-        // byte[] out2 = tcpOut.serialize();
-        // packetOut = new DatagramPacket(out2, out2.length, outAddr, remotePort);
-        // socket.send(packetOut);
 
         // ---------- DATA TRANSFER --------- // 
         byte[] payout = new String("Hello ").getBytes();
         tcpOut = new TCPpacket(payout);
+        tcpOut.setAckFlag(true);
+        tcpOut.setAck(curAck);
         tcpOut.setSequenceNum(sequenceNum);
         tcpOut.setLength(payout.length);
-        byte[] out5 = tcpOut.serialize();
-        packetOut = new DatagramPacket(out5, out5.length, outAddr, remotePort);
-        socket.send(packetOut);
-        sequenceNum += payout.length;
+        toSend.add(tcpOut);
 
         // response back from receiver
         packetIn = new DatagramPacket(buffer, buffer.length);
@@ -151,12 +160,11 @@ public class TCPend extends Thread {
 
         byte[] payout2 = new String("world\n").getBytes();
         tcpOut = new TCPpacket(payout2);
+        tcpOut.setAckFlag(true);
+        tcpOut.setAck(curAck);
         tcpOut.setSequenceNum(sequenceNum);
         tcpOut.setLength(payout2.length);
-        byte[] out6 = tcpOut.serialize();
-        packetOut = new DatagramPacket(out6, out6.length, outAddr, remotePort);
-        socket.send(packetOut);
-        sequenceNum += payout2.length;
+        toSend.add(tcpOut);
 
         // response back from receiver
         packetIn = new DatagramPacket(buffer, buffer.length);
@@ -174,12 +182,12 @@ public class TCPend extends Thread {
 
         // send FIN to receiver
         tcpOut = new TCPpacket();
+        tcpOut.setAckFlag(true);
+        tcpOut.setAck(curAck);
         tcpOut.setFinFlag(true);
         tcpOut.setSequenceNum(sequenceNum);
-        byte[] out3 = tcpOut.serialize();
-        packetOut = new DatagramPacket(out3, out3.length, outAddr, remotePort);
-        socket.send(packetOut);
-        sequenceNum += 1;
+        toSend.add(tcpOut);
+
 
         // response back from receiver
         packetIn = new DatagramPacket(buffer, buffer.length);
@@ -203,6 +211,7 @@ public class TCPend extends Thread {
 
         // verify that a FIN flag is detected
         if (tcpIn.getFinFlag()) {
+            curAck++;
             System.out.println("Sender received a FIN and sequence number " + tcpIn.getSequenceNum());
         } else {
             System.out.println("Sender didn't receive a FIN");
@@ -212,11 +221,8 @@ public class TCPend extends Thread {
         // send an ack
         tcpOut = new TCPpacket();
         tcpOut.setAckFlag(true);
-        tcpOut.setAck(tcpIn.getSequenceNum() + 1);
-        byte[] out4 = tcpOut.serialize();
-        packetOut = new DatagramPacket(out4, out4.length, outAddr, remotePort);
-        socket.send(packetOut);
-        sequenceNum++;
+        tcpOut.setAck(curAck);
+        toSend.add(tcpOut);
 
         socket.close();
         stage = Stage.CONNECTION_TERMINATED;
@@ -258,7 +264,7 @@ public class TCPend extends Thread {
 
         // update
         stage = Stage.HANDSHAKE;
-        expectedSeqNum = tcpIn.getSequenceNum() + tcpIn.getLength();
+        expectedSeqNum = tcpIn.getSequenceNum() + 1;
         sequenceNum++;
     }
 
@@ -324,7 +330,7 @@ public class TCPend extends Thread {
 
         System.out.println("Succesfully recived data packet");
 
-        expectedSeqNum += tcpIn.getPayload().length + 1;
+        expectedSeqNum += tcpIn.getLength();
 
         // write packet to file
         writeToFile(tcpIn.getPayload());
