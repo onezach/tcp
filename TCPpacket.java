@@ -1,7 +1,7 @@
 import java.net.DatagramPacket;
 import java.nio.ByteBuffer;
 
-public class TCPpacket {
+public class TCPpacket  implements Comparable<TCPpacket>{
     // actual TCP packet headers, will be serialized
     private int sequenceNum;
     private int ack;
@@ -242,6 +242,19 @@ public class TCPpacket {
         return str;
     }
 
+    @Override
+    public int compareTo(TCPpacket o) {
+        if (this.sequenceNum < o.sequenceNum) {
+            return -1;
+        }
+        else if (this.sequenceNum > o.sequenceNum) {
+            return 1;
+        }
+        else {
+            return 0;
+        }
+    }
+
     // Main method is for local testing purposes
     public static void main(String[] args) {
         // create arbitrary packet
@@ -274,6 +287,4 @@ public class TCPpacket {
 
 
     }
-
-
 }
