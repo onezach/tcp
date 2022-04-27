@@ -330,7 +330,7 @@ public class TCPend extends Thread {
 
         System.out.println("Succesfully recived data packet");
 
-        expectedSeqNum += tcpIn.getLength();
+        expectedSeqNum += tcpIn.getPayload().length;
 
         // write packet to file
         writeToFile(tcpIn.getPayload());
