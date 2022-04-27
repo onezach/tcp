@@ -9,6 +9,7 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.LinkedList;
+import java.util.PriorityQueue;
 import java.util.Queue;
 
 enum Stage {
@@ -39,6 +40,7 @@ public class TCPend {
     public static byte[] buffer;
     public static Queue<TCPpacket> toSend;
     public static Queue<TCPpacket> awaitingVerification;
+    public static Queue<TCPpacket> recieverBuffer;
     public static InetAddress outAddr;
     public static int rPort;
     public static ArrayList<Integer> curExpectedAcks;
@@ -317,24 +319,81 @@ public class TCPend {
         bw.write(payloadStr);
     }
 
-    private static void handleDataTransfer(TCPpacket tcpIn, DatagramPacket packetIn) throws IOException {
+    private static void handleDataTransfer(TCPpacket tcpIn, DatagramPacket packetIn, int sws) throws IOException {
         // check if next packet is next contigous
         if (tcpIn.getSequenceNum() != expectedSeqNum){
-            System.out.println("Error: wrong sequence number recieved in data_transfer stage, dropping packet");
+            System.out.println("wrong sequence number recieved in data_transfer stage");
             System.out.println("expxted: " + expectedSeqNum);
             System.out.println("got: " + tcpIn.getSequenceNum());
+
+            if (tcpIn.getSequenceNum() < expectedSeqNum || recieverBuffer.size() == sws ) {
+                System.out.println("Buffer full or old packet recieved, dropping packet");
+                return;
+            }
+
+            // add to queue
+            System.out.println("adding out of order packet to reciever buffer");
+            recieverBuffer.add(tcpIn);
+
+            // send ACK for missing 
+            // create TCP packet to send ACK
+            tcpOut = new TCPpacket();
+            tcpOut.setAck(expectedSeqNum);
+            tcpOut.setAckFlag(true);
+
+            // serialize
+            byte[] out = tcpOut.serialize();
+
+            // get information on sender so that we can send packets back
+            int senderPort = packetIn.getPort();
+            InetAddress senderAddress = packetIn.getAddress();
+            
+            // create Datagram out
+            packetOut = new DatagramPacket(out, out.length, senderAddress, senderPort);
+            
+            // send ACK
+            socket.send(packetOut);
+            System.out.println("Sending deup ACK for seq ");
+            return;
+
         }
 
         System.out.println("Succesfully recived data packet");
 
-        expectedSeqNum += tcpIn.getLength();
+        expectedSeqNum += tcpIn.getPayload().length;
 
         // write packet to file
         writeToFile(tcpIn.getPayload());
 
+        // if buffer not empty, flush and write
+        if (recieverBuffer.size() > 0) {
+            flushRecieverBuffer();
+
+            // create TCP packet to send ACK
+            tcpOut = new TCPpacket();
+            tcpOut.setAck(expectedSeqNum);
+            tcpOut.setAckFlag(true);
+
+            // serialize
+            byte[] out = tcpOut.serialize();
+
+            // get information on sender so that we can send packets back
+            int senderPort = packetIn.getPort();
+            InetAddress senderAddress = packetIn.getAddress();
+            
+            // create Datagram out
+            packetOut = new DatagramPacket(out, out.length, senderAddress, senderPort);
+            
+            // send ACK
+            socket.send(packetOut);
+            System.out.println("Sending ACK for seq " + expectedSeqNum);
+            return;
+
+        }
+
         // create TCP packet to send ACK
         tcpOut = new TCPpacket();
-        tcpOut.setAck(tcpIn.getSequenceNum() + tcpIn.getLength() + 1);
+        tcpOut.setAck(tcpIn.getSequenceNum() + tcpIn.getPayload().length + 1);
         tcpOut.setAckFlag(true);
 
         // serialize
@@ -399,11 +458,20 @@ public class TCPend {
         System.out.println("Sending FIN for fin");
 
         stage = Stage.CONNECTION_TERMINATED;
-        bw.close();
+        bw.close(); 
+    }
 
-
-
- 
+    public static void flushRecieverBuffer() throws IOException {
+        for (int i = 0; i < recieverBuffer.size(); i++) {
+            if (recieverBuffer.peek().getSequenceNum() == expectedSeqNum) {
+                TCPpacket packet = recieverBuffer.poll();
+                writeToFile(packet.getPayload());
+                expectedSeqNum += packet.getPayload().length;
+            }
+            else {
+                break;
+            }
+        }
     }
 
     public static void receiver(int port, int mtu, int sws, String fileName) throws IOException {
@@ -412,6 +480,7 @@ public class TCPend {
         outFile = new File(fileName);
         fw = new FileWriter(outFile);
         bw = new BufferedWriter(fw);
+        recieverBuffer = new PriorityQueue<TCPpacket>(sws);
         
         socket = new DatagramSocket(port);
 
@@ -437,7 +506,7 @@ public class TCPend {
                     handleHandShake(tcpIn, packetIn, fileName);
                     break;
                 case DATA_TRANSFER:
-                    handleDataTransfer(tcpIn, packetIn);
+                    handleDataTransfer(tcpIn, packetIn, sws);
                     break;
                 case FIN:
                     handleFin(tcpIn, packetIn);
