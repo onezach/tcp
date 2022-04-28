@@ -16,6 +16,7 @@ public class TCPpacket  implements Comparable<TCPpacket>{
 
     // constants and other attributes
     private static final int MAX_DATA_LEN = 1446;
+    private int numResent;
 
     // Constructors
     public TCPpacket() {
@@ -29,6 +30,7 @@ public class TCPpacket  implements Comparable<TCPpacket>{
         this.zeros = -1;
         this.checksum = 0;
         this.payload = null;
+        this.numResent = 0;
     }
 
     public TCPpacket(byte[] payload) {
@@ -42,6 +44,7 @@ public class TCPpacket  implements Comparable<TCPpacket>{
         this.zeros = -1;
         this.checksum = 0;
         this.payload = payload;
+        this.numResent = 0;
     }
 
     // Setters
