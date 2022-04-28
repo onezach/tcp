@@ -347,7 +347,7 @@ public class TCPend {
 
         // gateway to final ack --> wait until FIN is acked
         while (true) {
-            if (!complete) {
+            if (complete) {
                 break;
             }
             Thread.sleep(200);
