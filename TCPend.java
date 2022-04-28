@@ -40,10 +40,10 @@ public class TCPend {
     public static BufferedWriter bw;
     public static byte[] buffer;
     public static Queue<TCPpacket> toSend;
-    public static Queue<TCPpacket> awaitingVerification;
     public static Queue<TCPpacket> recieverBuffer;
     public static InetAddress outAddr;
     public static int rPort;
+    public static ArrayList<TCPpacket> awaitingVerification;
     public static ArrayList<Integer> curExpectedAcks;
     public static ArrayList<Boolean> curReceivedAcks;
     public static boolean complete;
@@ -56,7 +56,7 @@ public class TCPend {
                 for (int i = 0; i < awaitingVerification.size(); i++) {
                     if (curReceivedAcks.get(i) == true) {
                         for (int j = 0; j < i + 1; j++) {
-                            awaitingVerification.remove();
+                            awaitingVerification.remove(0);
                             curExpectedAcks.remove(0);
                             curReceivedAcks.remove(0);
                         }
@@ -156,11 +156,11 @@ public class TCPend {
 
     public class Retransmission extends Thread {
         public void run() {
-            while (stage == Stage.DATA_TRANSFER) {
+            while (stage != Stage.NO_CONNECTION && stage != Stage.CONNECTION_TERMINATED) {
                 synchronized (awaitingVerification) {
                     if (awaitingVerification.size() > 0) {
                         try {
-                            TCPpacket reout = awaitingVerification.peek();
+                            TCPpacket reout = awaitingVerification.get(0);
                             byte[] reoutArr = reout.serialize();
                             packetOut = new DatagramPacket(reoutArr, reoutArr.length, outAddr, rPort);
                             socket.send(packetOut);
@@ -192,7 +192,7 @@ public class TCPend {
         sequenceNum = 0;
 
         toSend = new LinkedList<>();
-        awaitingVerification = new LinkedList<>();
+        awaitingVerification = new ArrayList<>();
         curExpectedAcks = new ArrayList<>();
         curReceivedAcks = new ArrayList<>();
 
