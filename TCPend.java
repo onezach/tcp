@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.nio.ByteBuffer;
 import java.util.LinkedList;
 import java.util.PriorityQueue;
 import java.util.Queue;
@@ -232,12 +233,30 @@ public class TCPend extends Thread {
     ////////////////////////////////////////////// RECEIVER CODE /////////////////////////////////////////////////////////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    private static void sendPacket(DatagramPacket packetIn) throws IOException {
+        // serialize
+        byte[] out = tcpOut.serialize();
+
+        // get information on sender so that we can send packets back
+        int senderPort = packetIn.getPort();
+        InetAddress senderAddress = packetIn.getAddress();
+        
+        // create Datagram out and send
+        packetOut = new DatagramPacket(out, out.length, senderAddress, senderPort);
+        socket.send(packetOut);
+    }
+
     private static void handleNoConnection(TCPpacket tcpIn, DatagramPacket packetIn) throws IOException {
         // check if initial message is handhsake starter
         if (!tcpIn.getSynFlag()) {
             System.out.println("Error: recieved packet in stage NO_CONNECTION without a syn flag");
-            // Drop Packet
-            return;
+            return; // Drop Packet
+        }
+
+        // checksum check
+        if (!checkCheckSum(tcpIn)) {
+            System.out.println("error: incorrect checksum in handleNoConnection, dropping packet");
+            return; // Drop Packet
         }
         
         // print recieved
@@ -251,16 +270,8 @@ public class TCPend extends Thread {
         tcpOut.setAck(tcpIn.getSequenceNum() + 1);
         tcpOut.setAckFlag(true);
 
-        // serialize
-        byte[] out = tcpOut.serialize();
-
-        // get information on sender so that we can send packets back
-        int senderPort = packetIn.getPort();
-        InetAddress senderAddress = packetIn.getAddress();
-        
-        // create Datagram out and send
-        packetOut = new DatagramPacket(out, out.length, senderAddress, senderPort);
-        socket.send(packetOut);
+        // send packet
+        sendPacket(packetIn);
 
         // update
         stage = Stage.HANDSHAKE;
@@ -270,14 +281,18 @@ public class TCPend extends Thread {
 
     private static void handleHandShake(TCPpacket tcpIn, DatagramPacket packetIn, String fileName) throws IOException {
         // check if initial message is handhsake starter
-        if (!tcpIn.getAckFlag() || tcpIn.getAck() != sequenceNum) {
-            System.out.println("Error: recieved packet in stage Hnadshake without ack or wrong ack (" + tcpIn.getAck() + ")" + sequenceNum);
-            // Drop Packet
-            return;
+        if (!tcpIn.getAckFlag() || tcpIn.getAck() != expectedSeqNum) {
+            System.out.println("Error: recieved packet in stage handshake without ack or wrong ack (" + tcpIn.getAck() + ")" + sequenceNum);
+            return; // Drop Packet
+        }
+        // checksum check
+        if (!checkCheckSum(tcpIn)) {
+            System.out.println("error: incorrect checksum, dropping packet");
+            return; // Drop Packet
         }
         
         // print recieved
-        System.out.println("Receiver got ack to complete 3-way handshake");
+        System.out.println("Receiver got ack to complete 3-way handshake\n");
 
         // update current stage
         stage = Stage.DATA_TRANSFER;
@@ -290,6 +305,11 @@ public class TCPend extends Thread {
     }
 
     private static void handleDataTransfer(TCPpacket tcpIn, DatagramPacket packetIn, int sws) throws IOException {
+        // checksum check
+        if (!checkCheckSum(tcpIn)) {
+            System.out.println("error: incorrect checksum, dropping packet");
+            return; // Drop Packet
+        }
         // check if next packet is next contigous
         if (tcpIn.getSequenceNum() != expectedSeqNum){
             System.out.println("wrong sequence number recieved in data_transfer stage");
@@ -298,7 +318,7 @@ public class TCPend extends Thread {
 
             if (tcpIn.getSequenceNum() < expectedSeqNum || recieverBuffer.size() == sws ) {
                 System.out.println("Buffer full or old packet recieved, dropping packet");
-                return;
+                return; // Drop Packet
             }
 
             // add to queue
@@ -311,25 +331,15 @@ public class TCPend extends Thread {
             tcpOut.setAck(expectedSeqNum);
             tcpOut.setAckFlag(true);
 
-            // serialize
-            byte[] out = tcpOut.serialize();
-
-            // get information on sender so that we can send packets back
-            int senderPort = packetIn.getPort();
-            InetAddress senderAddress = packetIn.getAddress();
-            
-            // create Datagram out
-            packetOut = new DatagramPacket(out, out.length, senderAddress, senderPort);
-            
-            // send ACK
-            socket.send(packetOut);
+            // send packet
+            sendPacket(packetIn);
             System.out.println("Sending deup ACK for seq ");
+            System.out.println("|");
             return;
 
         }
 
         System.out.println("Succesfully recived data packet");
-
         expectedSeqNum += tcpIn.getPayload().length;
 
         // write packet to file
@@ -344,88 +354,48 @@ public class TCPend extends Thread {
             tcpOut.setAck(expectedSeqNum);
             tcpOut.setAckFlag(true);
 
-            // serialize
-            byte[] out = tcpOut.serialize();
-
-            // get information on sender so that we can send packets back
-            int senderPort = packetIn.getPort();
-            InetAddress senderAddress = packetIn.getAddress();
-            
-            // create Datagram out
-            packetOut = new DatagramPacket(out, out.length, senderAddress, senderPort);
-            
-            // send ACK
-            socket.send(packetOut);
+            // send packet
+            sendPacket(packetIn);
             System.out.println("Sending ACK for seq " + expectedSeqNum);
+            System.out.println("|");
             return;
-
         }
 
         // create TCP packet to send ACK
         tcpOut = new TCPpacket();
         tcpOut.setAck(tcpIn.getSequenceNum() + tcpIn.getPayload().length + 1);
         tcpOut.setAckFlag(true);
-
-        // serialize
-        byte[] out = tcpOut.serialize();
-
-        // get information on sender so that we can send packets back
-        int senderPort = packetIn.getPort();
-        InetAddress senderAddress = packetIn.getAddress();
-        
-        // create Datagram out
-        packetOut = new DatagramPacket(out, out.length, senderAddress, senderPort);
-        
-        // send ACK
-        socket.send(packetOut);
-        System.out.println("Sending ACK for seq " + tcpIn.getSequenceNum());
+        // send packet
+        sendPacket(packetIn);
+        System.out.println("Sending ACK for seq " + expectedSeqNum);
+        System.out.println("|");
     }
 
     private static void handleFin(TCPpacket tcpIn, DatagramPacket packetIn) throws IOException {
-        System.out.println("FIN recived, begin connection termination");
+        // checksum check
+        if (!checkCheckSum(tcpIn)) {
+            System.out.println("error: incorrect checksum, dropping packet");
+            return; // Drop Packet
+        }
+        System.out.println("\nFIN recived, begin connection termination");
         // create TCP packet to send ACK
         tcpOut = new TCPpacket();
         tcpOut.setAck(tcpIn.getSequenceNum() + 1);
         tcpOut.setAckFlag(true);
 
-        // serialize
-        byte[] out = tcpOut.serialize();
-
-        // get information on sender so that we can send packets back
-        int senderPort = packetIn.getPort();
-        InetAddress senderAddress = packetIn.getAddress();
-        
-        // create Datagram out
-        packetOut = new DatagramPacket(out, out.length, senderAddress, senderPort);
-        
-        // send ACK
-        socket.send(packetOut);
+        // send packet
+        sendPacket(packetIn);
         System.out.println("Sending ACK for fin");
 
-        ///////////////////////////////////////////
         // This is where reciever would clean up any loose ends before sending fin if we were actually doing that
-        ///////////////////////////////////////////
 
         // create TCP packet to send FIN
         tcpOut = new TCPpacket();
         tcpOut.setFinFlag(true);
         tcpOut.setSequenceNum(sequenceNum);
-        //tcpOut.setSequenceNum(); need to keep track of our seq
-
-
-        // serialize
-        out = tcpOut.serialize();
-
-        // get information on sender so that we can send packets back
-        senderPort = packetIn.getPort();
-        senderAddress = packetIn.getAddress();
         
-        // create Datagram out
-        packetOut = new DatagramPacket(out, out.length, senderAddress, senderPort);
-        
-        // send ACK
-        socket.send(packetOut);
-        System.out.println("Sending FIN for fin");
+        sendPacket(packetIn);
+        System.out.println("Sending FIN for fin\n");
 
         stage = Stage.CONNECTION_TERMINATED;
         bw.close(); 
@@ -444,19 +414,36 @@ public class TCPend extends Thread {
         }
     }
 
+    private static boolean checkCheckSum(TCPpacket packet) {
+        short oldCheckSum = packet.getChecksum();
+        packet.setChecksum((short)0);
+        byte[] serialized = packet.serialize();
+        ByteBuffer bb = ByteBuffer.wrap(serialized);
+        bb.getLong();
+        bb.getLong();
+        bb.getInt();
+        bb.getShort();
+        short newCheckSum = bb.getShort();
+        if (oldCheckSum != newCheckSum)
+            return false;
+        return true;
+
+    }
+
     public static void receiver(int port, int mtu, int sws, String fileName) throws IOException {
-        System.out.println("Starting Reciever");
+        System.out.println("Starting Reciever\n");
         stage = Stage.NO_CONNECTION;
+
+        // intitalize 
         outFile = new File(fileName);
         fw = new FileWriter(outFile);
         bw = new BufferedWriter(fw);
         recieverBuffer = new PriorityQueue<TCPpacket>(sws);
-        
         socket = new DatagramSocket(port);
 
         while (true) {
              // receive packet
-             byte[] buffer = new byte[1472];
+             buffer = new byte[1472];
              packetIn = new DatagramPacket(buffer, buffer.length);
              socket.receive(packetIn);
  
