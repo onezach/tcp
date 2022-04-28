@@ -27,7 +27,7 @@ public class TCPpacket  implements Comparable<TCPpacket>{
         this.finFlag = false;
         this.ackFlag = false;
         this.zeros = -1;
-        this.checksum = -1;
+        this.checksum = 0;
         this.payload = null;
     }
 
@@ -40,7 +40,7 @@ public class TCPpacket  implements Comparable<TCPpacket>{
         this.finFlag = false;
         this.ackFlag = false;
         this.zeros = -1;
-        this.checksum = -1;
+        this.checksum = 0;
         this.payload = payload;
     }
 
@@ -102,7 +102,7 @@ public class TCPpacket  implements Comparable<TCPpacket>{
     public boolean getAckFlag() {
         return this.ackFlag;
     }
-    public short setChecksum() {
+    public short getChecksum() {
         return this.checksum;
     }
 
@@ -182,6 +182,23 @@ public class TCPpacket  implements Comparable<TCPpacket>{
         // add payload to byte[] if present
         if (this.payload != null) {
             bb.put(this.payload);
+        }
+
+        // compute checksum if neccessary
+        if (this.checksum == (short)0) {
+            bb.rewind();
+            int accumulation = 0;
+
+            for (int i  = 0; i < length/2; i++) {
+                accumulation += 0xffff & bb.getShort();
+            }
+            if (length % 2 > 0) {
+                accumulation += (bb.get() & 0xff)  << 8;
+            }
+            accumulation = ((accumulation >> 16) & 0xffff)
+                    + (accumulation & 0xffff);
+            this.checksum = (short) (~accumulation & 0xffff);
+            bb.putShort(22, this.checksum);
         }
         return data;
     }
