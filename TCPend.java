@@ -56,34 +56,36 @@ public class TCPend {
     private static int packetsDiscarded;
     private static int numRetransmissions;
     private static int numDupAcknoledgement;
+    private static Retransmission retransThread;
+    private static int timeout;
 
     public class Retransmission extends Thread {
         public void run() {
             while (stage != Stage.CONNECTION_TERMINATED) {
                 synchronized (senderBuffer) {
                     for (int i = 0; i < senderBuffer.size(); i++) {
-                        TCPpacket retransmission = senderBuffer.get(i);
-                        byte[] serialized = retransmission.serialize();
-                        DatagramPacket retransmissionPacketOut = new DatagramPacket(serialized, serialized.length, outAddr, rPort);
-                        
-                        try {
-                            socket.send(retransmissionPacketOut);
-                        } catch (IOException e) {
-                            System.out.println("Error retransmitting packet with sequence number " + retransmission.getSequenceNum());
-                            e.printStackTrace();
-                        }
+                        if (System.nanoTime() - senderBuffer.get(i).getTimeStamp() > timeout) {
+                            synchronized (senderBuffer.get(i)) {
+                                senderBuffer.get(i).setTimeStamp(System.nanoTime());
+                            }
+                            
+                            byte[] serialized = senderBuffer.get(i).serialize();
+                            DatagramPacket retransmissionPacketOut = new DatagramPacket(serialized, serialized.length, outAddr, rPort);
+                            try {
+                                socket.send(retransmissionPacketOut);
+                            } catch (IOException e) {
+                                System.out.println("Error retransmitting packet with sequence number " + senderBuffer.get(i).getSequenceNum());
+                                e.printStackTrace();
+                            }
+                        }    
                     }
-                }
-                try {
-                    Thread.sleep(75);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
                 }
             }
         }
     }
 
     public static void sendPacketSender(TCPpacket tcpOutPacket) throws IOException {
+        tcpOutPacket.setTimeStamp(System.nanoTime());
         byte[] serialzied = tcpOutPacket.serialize();
         packetOut = new DatagramPacket(serialzied, serialzied.length, outAddr, rPort);
         socket.send(packetOut);
@@ -97,7 +99,8 @@ public class TCPend {
         sendPacketSender(tcpOut);
         System.out.println("Intiated HandShake with sequenceNum " + sequenceNum);
         sequenceNum++;
-        stage = stage.HANDSHAKE;
+        stage = Stage.HANDSHAKE;
+        retransThread.start();
     }
 
     public static void completeHandShake() throws IOException {
@@ -109,7 +112,8 @@ public class TCPend {
             tcpOut.setAck(tcpIn.getSequenceNum() + 1);
             sendPacketSender(tcpOut);
             currentAck = 1;
-            stage = stage.DATA_TRANSFER;
+            stage = Stage.DATA_TRANSFER;
+            timeout = 50 * 1000000;
         }
         else {
             System.out.println("Error in intitiateHandshake");
@@ -267,7 +271,8 @@ public class TCPend {
         System.out.println("numFullSegments: " + numFullSegments);
         System.out.println("length of last Segment: " + lengthOfLastSegment);
         justResent = false;
-
+        retransThread = (new TCPend()).new Retransmission();
+        timeout = 5000 * 1000000;
 
 
         // start connection
