@@ -50,6 +50,32 @@ public class TCPend {
     private static int lengthOfLastSegment;
     private static int numPacketsCreated;
 
+    public class Retransmission extends Thread {
+        public void run() {
+            while (stage != Stage.CONNECTION_TERMINATED) {
+                synchronized (senderBuffer) {
+                    for (int i = 0; i < senderBuffer.size(); i++) {
+                        TCPpacket retransmission = senderBuffer.get(i);
+                        byte[] serialized = retransmission.serialize();
+                        DatagramPacket retransmissionPacketOut = new DatagramPacket(serialized, serialized.length, outAddr, rPort);
+                        
+                        try {
+                            socket.send(retransmissionPacketOut);
+                        } catch (IOException e) {
+                            System.out.println("Error retransmitting packet with sequence number " + retransmission.getSequenceNum());
+                            e.printStackTrace();
+                        }
+                    }
+                }
+                try {
+                    Thread.sleep(75);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
     public static void sendPacketSender(TCPpacket tcpOutPacket) throws IOException {
         byte[] serialzied = tcpOutPacket.serialize();
         packetOut = new DatagramPacket(serialzied, serialzied.length, outAddr, rPort);
