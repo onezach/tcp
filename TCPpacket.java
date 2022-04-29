@@ -84,6 +84,9 @@ public class TCPpacket  implements Comparable<TCPpacket>{
     public void setIsSent(boolean isSent) {
         this.isSent = isSent;
     }
+    public void setNumResent(int numResent) {
+        this.numResent = numResent;
+    }
 
     // Getters
     public byte[] getPayload() {
@@ -115,6 +118,9 @@ public class TCPpacket  implements Comparable<TCPpacket>{
     }
     public boolean getIsSent() {
         return this.isSent;
+    }
+    public int getNumResent() {
+        return this.numResent;
     }
 
     // internal helper methods

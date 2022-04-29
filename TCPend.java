@@ -51,6 +51,12 @@ public class TCPend {
     private static int numPacketsCreated;
     private static boolean justResent;
 
+    private static int bytesRecived;
+    private static int packetsRecived;
+    private static int packetsDiscarded;
+    private static int numRetransmissions;
+    private static int numDupAcknoledgement;
+
     public class Retransmission extends Thread {
         public void run() {
             while (stage != Stage.CONNECTION_TERMINATED) {
@@ -151,10 +157,8 @@ public class TCPend {
             System.out.println("old Ack recieved, dropping");
             return; // drop packet
         }
-      /*   System.out.println("Ack recieved is " + tcpIn.getAck());
-        System.out.println("currentAck " + currentAck); */
+        // detects resends
         if (tcpIn.getAck() == currentAck) {
-            //System.out.println("Duplicate ACK detected");
             numDuplicates++;
             System.out.println("numduplicates: " + numDuplicates);
             if (numDuplicates >= 3) {
@@ -163,9 +167,17 @@ public class TCPend {
                     System.out.println("currentAck = " + currentAck);
                     System.out.println("packet.seqNum = " + packet.getSequenceNum());
                     if (packet.getSequenceNum()  == currentAck) {
+                        if (packet.getNumResent() >= 16) {
+                            System.out.println("Error: too many resend responses");
+                            System.exit(1);
+                        }
                         System.out.println("resending " + packet.getSequenceNum());
                         sendPacketSender(packet);
                         numDuplicates = 0;
+                        synchronized(packet) {
+                            int numResent = packet.getNumResent();
+                            packet.setNumResent(numResent + 1);
+                        }
                         justResent = true;
                         return;
                     }
