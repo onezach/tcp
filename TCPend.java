@@ -102,22 +102,27 @@ public class TCPend {
         tcpOut.setSequenceNum(sequenceNum);
         tcpOut.setSynFlag(true);
         //sendPacketSender(tcpOut);
+        tcpOut.setIsSent(true);
         senderBuffer.add(tcpOut);
         sendPackets(sws, mtu);
+
         System.out.println("Intiated HandShake with sequenceNum " + sequenceNum);
         sequenceNum++;
         stage = Stage.HANDSHAKE;
         retransThread.start();
     }
 
-    public static void completeHandShake() throws IOException {
+    public static void completeHandShake(int sws, int mtu) throws IOException {
         if (tcpIn.getSynFlag() && tcpIn.getAckFlag() && tcpIn.getAck() == sequenceNum) {
             System.out.println("Recieved Syn/Ack, sending ACK");
             expectedSeqNum = tcpIn.getSequenceNum() + 1;
             tcpOut = new TCPpacket();
             tcpOut.setAckFlag(true);
             tcpOut.setAck(tcpIn.getSequenceNum() + 1);
-            sendPacketSender(tcpOut);
+            tcpOut.setIsSent(true);
+            //sendPacketSender(tcpOut);
+            senderBuffer.add(tcpOut);
+            sendPackets(sws, mtu);
             currentAck = 1;
             stage = Stage.DATA_TRANSFER;
             timeout = 50 * 1000000;
@@ -298,7 +303,7 @@ public class TCPend {
                 case NO_CONNECTION:
                     break;
                 case HANDSHAKE:
-                    completeHandShake();
+                    completeHandShake(sws, mtu);
                     populateBuffer(sws, mtu);
                     sendPackets(sws, mtu);
                     break;
@@ -327,8 +332,7 @@ public class TCPend {
             }
         }
         System.out.println("Connection terminated");
-        System.out.println(numDuplicates);
-                    return;
+        return;
     }
 
 
@@ -447,6 +451,8 @@ public class TCPend {
             // send packet
             sendPacket(packetIn);
             System.out.println("Sending deup ACK for seq " + expectedSeqNum);
+            numDupAcknoledgement++;
+            numRetransmissions++;
             System.out.println("|");
             return;
 
@@ -540,6 +546,7 @@ public class TCPend {
 
     public static void receiver(int port, int mtu, int sws, String fileName) throws IOException {
         System.out.println("Starting Reciever\n");
+        
         stage = Stage.NO_CONNECTION;
 
         // intitalize 
@@ -548,6 +555,11 @@ public class TCPend {
         bw = new BufferedWriter(fw);
         recieverBuffer = new PriorityQueue<TCPpacket>(sws);
         socket = new DatagramSocket(port);
+        bytesRecived = 0;
+        packetsRecived = 0;
+        packetsDiscarded = 0;
+        numRetransmissions = 0;
+        numDupAcknoledgement = 0;
 
         while (true) {
              // receive packet
@@ -583,6 +595,11 @@ public class TCPend {
                 break;
         }
         System.out.println("Receiver closing...");
+        System.out.println("bytes recived: " + bytesRecived);
+        System.out.println("packets recieved: " + packetsRecived);
+        System.out.println("packets discarded: " + packetsDiscarded);
+        System.out.println("numRetransmissions: " + numRetransmissions/3);
+        System.out.println("numDupAckowledgements: " + numDupAcknoledgement);
         socket.close();
     }   
 
