@@ -60,7 +60,7 @@ public class TCPend {
                             curExpectedAcks.remove(0);
                             curReceivedAcks.remove(0);
                         }
-                        System.out.println("After a clearing: " + curExpectedAcks + " " + curReceivedAcks);
+                        // System.out.println("After a clearing: " + curExpectedAcks + " " + curReceivedAcks);
                         break;
                     }
                 }
@@ -159,7 +159,7 @@ public class TCPend {
                             packetOut = new DatagramPacket(reoutArr, reoutArr.length, outAddr, rPort);
                             socket.send(packetOut);
                             System.out.println("Sender retransmits packet with sequence number " + reout.getSequenceNum() + " and length " + reout.getLength());
-                            Thread.sleep(1000);
+                            Thread.sleep(30);
                         } catch (Exception e) {
                             System.out.println("Retransmission error");
                         }
@@ -240,6 +240,7 @@ public class TCPend {
 
             toSend.add(tcpOut);
             sequenceNum = sequenceNum + maxSize;
+            Thread.yield();
         }
 
         char[] lastBuf = new char[partialSegLength];
@@ -437,9 +438,11 @@ public class TCPend {
     }
 
     private static void writeToFile(byte[] payload) throws IOException {
-        String payloadStr = new String(payload, 0, payload.length);
-        System.out.println("writing to file");
-        bw.write(payloadStr);
+        if (payload != null) {
+            String payloadStr = new String(payload, 0, payload.length);
+            System.out.println("writing to file");
+            bw.write(payloadStr);
+        }
     }
 
     private static void handleDataTransfer(TCPpacket tcpIn, DatagramPacket packetIn, int sws) throws IOException {
