@@ -143,7 +143,7 @@ public class TCPend {
                 } catch (Exception e) {
                     System.out.println("Acknowledgement error");
                 }
-                Thread.yield();
+                // Thread.yield();
             }
         }
     }
