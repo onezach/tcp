@@ -92,11 +92,13 @@ public class TCPend {
         tcpOutPacket.setIsSent(true);
     }
 
-    public static void initiateHandShake() throws IOException {
+    public static void initiateHandShake(int sws, int mtu) throws IOException {
         tcpOut = new TCPpacket();
         tcpOut.setSequenceNum(sequenceNum);
         tcpOut.setSynFlag(true);
-        sendPacketSender(tcpOut);
+        //sendPacketSender(tcpOut);
+        senderBuffer.add(tcpOut);
+        sendPackets(sws, mtu);
         System.out.println("Intiated HandShake with sequenceNum " + sequenceNum);
         sequenceNum++;
         stage = Stage.HANDSHAKE;
@@ -276,7 +278,7 @@ public class TCPend {
 
 
         // start connection
-        initiateHandShake();
+        initiateHandShake(sws, mtu);
 
         while (stage != Stage.CONNECTION_TERMINATED) {
             // receive packet
@@ -346,12 +348,14 @@ public class TCPend {
         // check if initial message is handhsake starter
         if (!tcpIn.getSynFlag()) {
             System.out.println("Error: recieved packet in stage NO_CONNECTION without a syn flag");
+            packetsDiscarded++;
             return; // Drop Packet
         }
 
         // checksum check
         if (!checkCheckSum(tcpIn)) {
             System.out.println("error: incorrect checksum in handleNoConnection, dropping packet");
+            packetsDiscarded++;
             return; // Drop Packet
         }
         
@@ -379,11 +383,13 @@ public class TCPend {
         // check if initial message is handhsake starter
         if (!tcpIn.getAckFlag() || tcpIn.getAck() != expectedSeqNum) {
             System.out.println("Error: recieved packet in stage handshake without ack or wrong ack (" + tcpIn.getAck() + ")" + sequenceNum);
+            packetsDiscarded++;
             return; // Drop Packet
         }
         // checksum check
         if (!checkCheckSum(tcpIn)) {
             System.out.println("error: incorrect checksum, dropping packet");
+            packetsDiscarded++;
             return; // Drop Packet
         }
         
@@ -398,6 +404,8 @@ public class TCPend {
         if (payload != null) {
             String payloadStr = new String(payload, 0, payload.length);
             System.out.println("writing to file");
+            bytesRecived += payloadStr.length();
+            packetsRecived ++;
             bw.write(payloadStr);
         }
     }
@@ -406,6 +414,7 @@ public class TCPend {
         // checksum check
         if (!checkCheckSum(tcpIn)) {
             System.out.println("error: incorrect checksum, dropping packet");
+            packetsDiscarded++;
             return; // Drop Packet
         }
         // check if next packet is next contigous
@@ -416,6 +425,7 @@ public class TCPend {
 
             if (tcpIn.getSequenceNum() < expectedSeqNum || recieverBuffer.size() == sws ) {
                 System.out.println("Buffer full or old packet recieved, dropping packet");
+                packetsDiscarded++;
                 return; // Drop Packet
             }
 
@@ -474,6 +484,7 @@ public class TCPend {
         // checksum check
         if (!checkCheckSum(tcpIn)) {
             System.out.println("error: incorrect checksum, dropping packet");
+            packetsDiscarded++;
             return; // Drop Packet
         }
         System.out.println("\nFIN recived, begin connection termination");
