@@ -66,7 +66,12 @@ public class TCPend {
                     for (int i = 0; i < senderBuffer.size(); i++) {
                         if (System.nanoTime() - senderBuffer.get(i).getTimeStamp() > timeout) {
                             synchronized (senderBuffer.get(i)) {
+                                if (senderBuffer.get(i).getNumResent() >= 16) {
+                                    System.out.println("Error: too many resend responses");
+                                    System.exit(1);
+                                }
                                 senderBuffer.get(i).setTimeStamp(System.nanoTime());
+                                senderBuffer.get(i).setNumResent(senderBuffer.get(i).getNumResent() + 1);
                             }
                             
                             byte[] serialized = senderBuffer.get(i).serialize();
