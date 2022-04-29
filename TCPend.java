@@ -105,7 +105,7 @@ public class TCPend {
         tcpOut = new TCPpacket();
         tcpOut.setSequenceNum(sequenceNum);
         tcpOut.setSynFlag(true);
-        //sendPacketSender(tcpOut);
+        // sendPacketSender(tcpOut);
         tcpOut.setIsSent(true);
         synchronized (senderBuffer) {
             senderBuffer.add(tcpOut);
@@ -126,12 +126,13 @@ public class TCPend {
             tcpOut.setAckFlag(true);
             tcpOut.setAck(tcpIn.getSequenceNum() + 1);
             tcpOut.setIsSent(true);
-            //sendPacketSender(tcpOut);
-            senderBuffer.add(tcpOut);
+            synchronized (senderBuffer) {
+                senderBuffer.add(tcpOut);
+            }
             sendPackets(sws, mtu);
             currentAck = 1;
             stage = Stage.DATA_TRANSFER;
-            timeout = (long) 100000000.0;
+            timeout = (long) 50000000.0;
         }
         else {
             System.out.println("Error in intitiateHandshake");
@@ -258,7 +259,9 @@ public class TCPend {
         tcpOut.setSequenceNum(sequenceNum);
         tcpOut.setLength(0);
         tcpOut.setFinFlag(true);
-        sendPacketSender(tcpOut);
+        synchronized (senderBuffer) {
+            senderBuffer.add(tcpOut);
+        }
     }
 
     public static void handleClose () throws IOException {
