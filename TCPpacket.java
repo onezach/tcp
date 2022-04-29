@@ -17,6 +17,7 @@ public class TCPpacket  implements Comparable<TCPpacket>{
     // constants and other attributes
     private static final int MAX_DATA_LEN = 1446;
     private int numResent;
+    private boolean isSent;
 
     // Constructors
     public TCPpacket() {
@@ -31,6 +32,7 @@ public class TCPpacket  implements Comparable<TCPpacket>{
         this.checksum = 0;
         this.payload = null;
         this.numResent = 0;
+        this.isSent = false;
     }
 
     public TCPpacket(byte[] payload) {
@@ -45,6 +47,7 @@ public class TCPpacket  implements Comparable<TCPpacket>{
         this.checksum = 0;
         this.payload = payload;
         this.numResent = 0;
+        this.isSent = false;
     }
 
     // Setters
@@ -79,6 +82,9 @@ public class TCPpacket  implements Comparable<TCPpacket>{
     public void setChecksum(short checksum) {
         this.checksum = checksum;
     }
+    public void setIsSent(boolean isSent) {
+        this.isSent = isSent;
+    }
 
     // Getters
     public byte[] getPayload() {
@@ -107,6 +113,9 @@ public class TCPpacket  implements Comparable<TCPpacket>{
     }
     public short getChecksum() {
         return this.checksum;
+    }
+    public boolean getIsSent() {
+        return this.isSent;
     }
 
     // internal helper methods
@@ -245,7 +254,6 @@ public class TCPpacket  implements Comparable<TCPpacket>{
         str+= "zeros: " + this.zeros + "\n";
         str+= "checksum: " + this.checksum + "\n";
         if (this.payload != null) {
-            System.out.println(this.payload.length - 21);
             str+= "payLoad length: " + this.payload.length + "\n";
             if (this.payload.length > 40){
                 str+= "first 20 characters: " + new String(this.payload, 0, 20) + "\n";
