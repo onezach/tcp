@@ -13,6 +13,8 @@ import java.util.LinkedList;
 import java.util.PriorityQueue;
 import java.util.Queue;
 
+import javax.swing.plaf.synth.SynthCheckBoxMenuItemUI;
+
 enum Stage {
     NO_CONNECTION,
     HANDSHAKE,
@@ -57,7 +59,7 @@ public class TCPend {
     private static int numRetransmissions;
     private static int numDupAcknoledgement;
     private static Retransmission retransThread;
-    private static int timeout;
+    private static long timeout;
 
     public class Retransmission extends Thread {
         public void run() {
@@ -65,21 +67,22 @@ public class TCPend {
                 synchronized (senderBuffer) {
                     for (int i = 0; i < senderBuffer.size(); i++) {
                         if (System.nanoTime() - senderBuffer.get(i).getTimeStamp() > timeout) {
-                            synchronized (senderBuffer.get(i)) {
-                                if (senderBuffer.get(i).getNumResent() >= 16) {
-                                    System.out.println("Error: too many resend responses");
-                                    System.exit(1);
-                                }
-                                senderBuffer.get(i).setTimeStamp(System.nanoTime());
-                                senderBuffer.get(i).setNumResent(senderBuffer.get(i).getNumResent() + 1);
+                            if (senderBuffer.get(i).getNumResent() >= 16) {
+                                System.out.println("Error: too many resend responses up top");
+                                System.exit(1);
                             }
+
+                            TCPpacket retransmissionPacket = senderBuffer.get(i);
+                            retransmissionPacket.setTimeStamp(System.nanoTime());
+                            retransmissionPacket.setNumResent(senderBuffer.get(i).getNumResent() + 1);
+                            retransmissionPacket.setChecksum((short) 0);
                             
-                            byte[] serialized = senderBuffer.get(i).serialize();
+                            byte[] serialized = retransmissionPacket.serialize();
                             DatagramPacket retransmissionPacketOut = new DatagramPacket(serialized, serialized.length, outAddr, rPort);
                             try {
                                 socket.send(retransmissionPacketOut);
                             } catch (IOException e) {
-                                System.out.println("Error retransmitting packet with sequence number " + senderBuffer.get(i).getSequenceNum());
+                                System.out.println("Error retransmitting packet with sequence number " + retransmissionPacket.getSequenceNum());
                                 e.printStackTrace();
                             }
                         }    
@@ -91,6 +94,7 @@ public class TCPend {
 
     public static void sendPacketSender(TCPpacket tcpOutPacket) throws IOException {
         tcpOutPacket.setTimeStamp(System.nanoTime());
+        tcpOutPacket.setChecksum((short) 0);
         byte[] serialzied = tcpOutPacket.serialize();
         packetOut = new DatagramPacket(serialzied, serialzied.length, outAddr, rPort);
         socket.send(packetOut);
@@ -103,7 +107,9 @@ public class TCPend {
         tcpOut.setSynFlag(true);
         //sendPacketSender(tcpOut);
         tcpOut.setIsSent(true);
-        senderBuffer.add(tcpOut);
+        synchronized (senderBuffer) {
+            senderBuffer.add(tcpOut);
+        }
         sendPackets(sws, mtu);
 
         System.out.println("Intiated HandShake with sequenceNum " + sequenceNum);
@@ -125,7 +131,7 @@ public class TCPend {
             sendPackets(sws, mtu);
             currentAck = 1;
             stage = Stage.DATA_TRANSFER;
-            timeout = 50 * 1000000;
+            timeout = (long) 100000000.0;
         }
         else {
             System.out.println("Error in intitiateHandshake");
@@ -140,18 +146,22 @@ public class TCPend {
             tcpOut = new TCPpacket((new String(payload, 0, mtu)).getBytes());
             tcpOut.setSequenceNum(sequenceNum);
             tcpOut.setLength(tcpOut.getPayload().length);
-            senderBuffer.add(tcpOut);
+            synchronized (senderBuffer) {
+                senderBuffer.add(tcpOut);
+            }
             sequenceNum += tcpOut.getLength();
         }
         numPacketsCreated += sws;
     }
 
     public static void sendPackets(int sws, int mtu) throws IOException {
-        for (TCPpacket packet : senderBuffer) {
-            if (!packet.getIsSent() && packet.getSequenceNum() != 1001001) {
-                sendPacketSender(packet);
-                System.out.println("Pakcet " + packet.getSequenceNum() +  " sent");
-                break;
+        synchronized (senderBuffer) {
+            for (TCPpacket packet : senderBuffer) {
+                if (!packet.getIsSent()) {
+                    sendPacketSender(packet);
+                    // System.out.println("Pakcet " + packet.getSequenceNum() +  " sent");
+                    break;
+                }
             }
         }
         if (stage != Stage.FIN)
@@ -173,68 +183,70 @@ public class TCPend {
             System.out.println("old Ack recieved, dropping");
             return; // drop packet
         }
-        // detects resends
-        if (tcpIn.getAck() == currentAck) {
-            numDuplicates++;
-            System.out.println("numduplicates: " + numDuplicates);
-            if (numDuplicates >= 3) {
-                // resend
-                for (TCPpacket packet: senderBuffer) {
-                    System.out.println("currentAck = " + currentAck);
-                    System.out.println("packet.seqNum = " + packet.getSequenceNum());
-                    if (packet.getSequenceNum()  == currentAck) {
-                        if (packet.getNumResent() >= 16) {
-                            System.out.println("Error: too many resend responses");
-                            System.exit(1);
+        synchronized (senderBuffer) {
+            // detects resends
+            if (tcpIn.getAck() == currentAck) {
+                numDuplicates++;
+                System.out.println("numduplicates: " + numDuplicates);
+                if (numDuplicates >= 3) {
+                    // resend
+                    for (TCPpacket packet: senderBuffer) {
+                        System.out.println("currentAck = " + currentAck);
+                        System.out.println("packet.seqNum = " + packet.getSequenceNum());
+                        if (packet.getSequenceNum()  == currentAck) {
+                            if (packet.getNumResent() >= 16) {
+                                System.out.println("Error: too many resend responses");
+                                System.exit(1);
+                            }
+                            System.out.println("resending " + packet.getSequenceNum());
+                            sendPacketSender(packet);
+                            numDuplicates = 0;
+                            synchronized(packet) {
+                                int numResent = packet.getNumResent();
+                                packet.setNumResent(numResent + 1);
+                            }
+                            justResent = true;
+                            return;
                         }
-                        System.out.println("resending " + packet.getSequenceNum());
-                        sendPacketSender(packet);
-                        numDuplicates = 0;
-                        synchronized(packet) {
-                            int numResent = packet.getNumResent();
-                            packet.setNumResent(numResent + 1);
-                        }
-                        justResent = true;
-                        return;
                     }
                 }
             }
-        }
-        currentAck = tcpIn.getAck();
-        int numRemoved = 0;
-        for(int i = 0; i < senderBuffer.size(); i++) {
-            if (i < senderBuffer.size() && senderBuffer.get(i).getSequenceNum() < tcpIn.getAck()) {
-                senderBuffer.remove(i);
-                i--;
-                numRemoved++;
+            currentAck = tcpIn.getAck();
+            int numRemoved = 0;
+            for(int i = 0; i < senderBuffer.size(); i++) {
+                if (i < senderBuffer.size() && senderBuffer.get(i).getSequenceNum() < tcpIn.getAck()) {
+                    senderBuffer.remove(i);
+                    i--;
+                    numRemoved++;
+                }
             }
-        }
-        if (lastAck != -1 ){
-            return;
-        }
-        for (int i = 0; i < numRemoved; i++) {
-            char[] payload;
-            if (numPacketsCreated == numFullSegments) {
-                payload = new char[lengthOfLastSegment];
-                mtu = lengthOfLastSegment;
+            if (lastAck != -1 ){
+                return;
             }
-            else {
-                payload = new char[mtu];
-            }
-            if (br.read(payload) != -1) {
-                tcpOut = new TCPpacket((new String(payload, 0, mtu)).getBytes());
-                tcpOut.setSequenceNum(sequenceNum);
-                tcpOut.setLength(tcpOut.getPayload().length);
-                senderBuffer.add(tcpOut);
-                sequenceNum += tcpOut.getLength();
-                numPacketsCreated++;
-                
-            }
-            else {
-                System.out.println("last Packet created");
-                lastAck = sequenceNum;
-                System.out.println("lastAck = " + (sequenceNum));
-                break;
+            for (int i = 0; i < numRemoved; i++) {
+                char[] payload;
+                if (numPacketsCreated == numFullSegments) {
+                    payload = new char[lengthOfLastSegment];
+                    mtu = lengthOfLastSegment;
+                }
+                else {
+                    payload = new char[mtu];
+                }
+                if (br.read(payload) != -1) {
+                    tcpOut = new TCPpacket((new String(payload, 0, mtu)).getBytes());
+                    tcpOut.setSequenceNum(sequenceNum);
+                    tcpOut.setLength(tcpOut.getPayload().length);
+                    senderBuffer.add(tcpOut);
+                    sequenceNum += tcpOut.getLength();
+                    numPacketsCreated++;
+                    
+                }
+                else {
+                    System.out.println("last Packet created");
+                    lastAck = sequenceNum;
+                    System.out.println("lastAck = " + (sequenceNum));
+                    break;
+                }
             }
         }
 
@@ -259,7 +271,7 @@ public class TCPend {
             sendPacketSender(tcpOut);
             System.out.println("recieved Fin/Ack, sending final ack");
             stage = Stage.CONNECTION_TERMINATED;
-            }
+        }
     }
 
     public static void sender(int port, String remoteIP, int remotePort, String fileName, int mtu, int sws) throws IOException, InterruptedException {
@@ -284,8 +296,7 @@ public class TCPend {
         System.out.println("length of last Segment: " + lengthOfLastSegment);
         justResent = false;
         retransThread = (new TCPend()).new Retransmission();
-        timeout = 5000 * 1000000;
-
+        timeout = (long) 5000000000.0;
 
         // start connection
         initiateHandShake(sws, mtu);
@@ -309,8 +320,10 @@ public class TCPend {
                     break;
                 case DATA_TRANSFER:
                     handleAck(sws, mtu);
-                    if (senderBuffer.size() == 0 && lastAck != -1) {
-                        stage = Stage.FIN;
+                    synchronized (senderBuffer) {
+                        if (senderBuffer.size() == 0 && lastAck != -1) {
+                            stage = Stage.FIN;
+                        }
                     }
                     if (!justResent){
                         sendPackets(sws, mtu);
@@ -332,6 +345,7 @@ public class TCPend {
             }
         }
         System.out.println("Connection terminated");
+        System.out.println(numDuplicates);
         return;
     }
 
