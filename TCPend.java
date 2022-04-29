@@ -49,6 +49,7 @@ public class TCPend {
     private static int numFullSegments;
     private static int lengthOfLastSegment;
     private static int numPacketsCreated;
+    private static boolean justResent;
 
     public static void sendPacketSender(TCPpacket tcpOutPacket) throws IOException {
         byte[] serialzied = tcpOutPacket.serialize();
@@ -99,15 +100,23 @@ public class TCPend {
 
     public static void sendPackets(int sws, int mtu) throws IOException {
         for (TCPpacket packet : senderBuffer) {
-            if (!packet.getIsSent()) {
+            if (!packet.getIsSent() && packet.getSequenceNum() != 1001001) {
                 sendPacketSender(packet);
                 System.out.println("Pakcet " + packet.getSequenceNum() +  " sent");
+                break;
             }
         }
-        stage = Stage.DATA_TRANSFER;
+        if (stage != Stage.FIN)
+            stage = Stage.DATA_TRANSFER;
     }
 
     public static void handleAck(int sws, int mtu) throws IOException {
+        justResent = false;
+         if (tcpIn.getAck() == lastAck) {
+            System.out.println("We're good here!");
+            stage = Stage.FIN;
+            return;
+        }
         if (!tcpIn.getAckFlag()) {
             System.out.println("Error: Ack not recieved in data transfer mode");
             return; // drop packet
@@ -116,16 +125,31 @@ public class TCPend {
             System.out.println("old Ack recieved, dropping");
             return; // drop packet
         }
+      /*   System.out.println("Ack recieved is " + tcpIn.getAck());
+        System.out.println("currentAck " + currentAck); */
         if (tcpIn.getAck() == currentAck) {
+            //System.out.println("Duplicate ACK detected");
             numDuplicates++;
+            System.out.println("numduplicates: " + numDuplicates);
             if (numDuplicates >= 3) {
-                //resend
-                numDuplicates = 0;
+                // resend
+                for (TCPpacket packet: senderBuffer) {
+                    System.out.println("currentAck = " + currentAck);
+                    System.out.println("packet.seqNum = " + packet.getSequenceNum());
+                    if (packet.getSequenceNum()  == currentAck) {
+                        System.out.println("resending " + packet.getSequenceNum());
+                        sendPacketSender(packet);
+                        numDuplicates = 0;
+                        justResent = true;
+                        return;
+                    }
+                }
             }
         }
+        currentAck = tcpIn.getAck();
         int numRemoved = 0;
         for(int i = 0; i < senderBuffer.size(); i++) {
-            if (i < senderBuffer.size() && senderBuffer.get(i).getSequenceNum() <= tcpIn.getAck()) {
+            if (i < senderBuffer.size() && senderBuffer.get(i).getSequenceNum() < tcpIn.getAck()) {
                 senderBuffer.remove(i);
                 i--;
                 numRemoved++;
@@ -204,6 +228,7 @@ public class TCPend {
         numPacketsCreated = 0;
         System.out.println("numFullSegments: " + numFullSegments);
         System.out.println("length of last Segment: " + lengthOfLastSegment);
+        justResent = false;
 
 
 
@@ -231,10 +256,12 @@ public class TCPend {
                     handleAck(sws, mtu);
                     if (senderBuffer.size() == 0 && lastAck != -1) {
                         stage = Stage.FIN;
-                        break;
                     }
-                    sendPackets(sws, mtu);
-                    break;
+                    if (!justResent){
+                        sendPackets(sws, mtu);
+                    }
+                    if (stage != Stage.FIN)
+                        break;
                 case FIN:
                     sendFin();
                     buffer = new byte[1472];
@@ -361,7 +388,7 @@ public class TCPend {
 
             // send packet
             sendPacket(packetIn);
-            System.out.println("Sending deup ACK for seq ");
+            System.out.println("Sending deup ACK for seq " + expectedSeqNum);
             System.out.println("|");
             return;
 
@@ -423,7 +450,8 @@ public class TCPend {
     }
 
     public static void flushRecieverBuffer() throws IOException {
-        for (int i = 0; i < recieverBuffer.size(); i++) {
+        int cap = recieverBuffer.size();
+        for (int i = 0; i < cap; i++) {
             if (recieverBuffer.peek().getSequenceNum() == expectedSeqNum) {
                 TCPpacket packet = recieverBuffer.poll();
                 writeToFile(packet.getPayload());
