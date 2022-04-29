@@ -132,7 +132,7 @@ public class TCPend {
             sendPackets(sws, mtu);
             currentAck = 1;
             stage = Stage.DATA_TRANSFER;
-            timeout = (long) 50000000.0;
+            timeout = (long) 100000000.0;
         }
         else {
             System.out.println("Error in intitiateHandshake");
