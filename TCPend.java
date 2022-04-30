@@ -9,11 +9,8 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.PriorityQueue;
 import java.util.Queue;
-
-import javax.swing.plaf.synth.SynthCheckBoxMenuItemUI;
 
 enum Stage {
     NO_CONNECTION,
