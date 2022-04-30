@@ -49,6 +49,7 @@ public class TCPend {
     private static int lengthOfLastSegment;
     private static int numPacketsCreated;
     private static boolean justResent;
+    private static int size;
 
     private static int bytesRecived;
     private static int packetsRecived;
@@ -98,7 +99,7 @@ public class TCPend {
         tcpOutPacket.setIsSent(true);
     }
 
-    public static void initiateHandShake(int sws, int mtu) throws IOException {
+    public static void initiateHandShake() throws IOException {
         tcpOut = new TCPpacket();
         tcpOut.setSequenceNum(sequenceNum);
         tcpOut.setSynFlag(true);
@@ -107,7 +108,7 @@ public class TCPend {
         synchronized (senderBuffer) {
             senderBuffer.add(tcpOut);
         }
-        sendPackets(sws, mtu);
+        sendPackets();
 
         System.out.println("Intiated HandShake with sequenceNum " + sequenceNum);
         sequenceNum++;
@@ -126,7 +127,7 @@ public class TCPend {
             synchronized (senderBuffer) {
                 senderBuffer.add(tcpOut);
             }
-            sendPackets(sws, mtu);
+            sendPackets();
             currentAck = 1;
             stage = Stage.DATA_TRANSFER;
             timeout = (long) 100000000.0;
@@ -138,7 +139,7 @@ public class TCPend {
     }
 
     public static void populateBuffer(int sws, int mtu) throws IOException {
-        for (int i = 0; i < sws; i++) {
+        for (int i = 0; i < size; i++) {
             char[] payload = new char[mtu];
             br.read(payload);
             tcpOut = new TCPpacket((new String(payload, 0, mtu)).getBytes());
@@ -149,10 +150,10 @@ public class TCPend {
             }
             sequenceNum += tcpOut.getLength();
         }
-        numPacketsCreated += sws;
+        numPacketsCreated += size;
     }
 
-    public static void sendPackets(int sws, int mtu) throws IOException {
+    public static void sendPackets() throws IOException {
         synchronized (senderBuffer) {
             for (TCPpacket packet : senderBuffer) {
                 if (!packet.getIsSent()) {
@@ -286,7 +287,12 @@ public class TCPend {
         outAddr = InetAddress.getByName(remoteIP);
         rPort = remotePort;
         sequenceNum = 0;
-        senderBuffer = new ArrayList<TCPpacket>(sws);
+        if (sws/mtu == 0) {
+            size = 1;
+        } else {
+            size = sws/mtu;
+        }
+        senderBuffer = new ArrayList<TCPpacket>(size);
         numDuplicates = 0;
         lastAck = -1;
         numFullSegments = (int)(inFile.length() / mtu);
@@ -299,7 +305,7 @@ public class TCPend {
         timeout = (long) 5000000000.0;
 
         // start connection
-        initiateHandShake(sws, mtu);
+        initiateHandShake();
 
         while (stage != Stage.CONNECTION_TERMINATED) {
             // receive packet
@@ -316,7 +322,7 @@ public class TCPend {
                 case HANDSHAKE:
                     completeHandShake(sws, mtu);
                     populateBuffer(sws, mtu);
-                    sendPackets(sws, mtu);
+                    sendPackets();
                     break;
                 case DATA_TRANSFER:
                     handleAck(sws, mtu);
@@ -326,7 +332,7 @@ public class TCPend {
                         }
                     }
                     if (!justResent){
-                        sendPackets(sws, mtu);
+                        sendPackets();
                     }
                     if (stage != Stage.FIN)
                         break;
@@ -433,7 +439,7 @@ public class TCPend {
         }
     }
 
-    private static void handleDataTransfer(TCPpacket tcpIn, DatagramPacket packetIn, int sws) throws IOException {
+    private static void handleDataTransfer(TCPpacket tcpIn, DatagramPacket packetIn, int sws, int mtu) throws IOException {
         // checksum check
         if (!checkCheckSum(tcpIn)) {
             System.out.println("error: incorrect checksum, dropping packet");
@@ -446,7 +452,7 @@ public class TCPend {
             System.out.println("expxted: " + expectedSeqNum);
             System.out.println("got: " + tcpIn.getSequenceNum());
 
-            if (tcpIn.getSequenceNum() < expectedSeqNum || recieverBuffer.size() == sws ) {
+            if (tcpIn.getSequenceNum() < expectedSeqNum || recieverBuffer.size() == size ) {
                 System.out.println("Buffer full or old packet recieved, dropping packet");
                 packetsDiscarded++;
                 return; // Drop Packet
@@ -567,7 +573,12 @@ public class TCPend {
         outFile = new File(fileName);
         fw = new FileWriter(outFile);
         bw = new BufferedWriter(fw);
-        recieverBuffer = new PriorityQueue<TCPpacket>(sws);
+        if (sws/mtu == 0) {
+            size = 1;
+        } else {
+            size = sws/mtu;
+        }
+        recieverBuffer = new PriorityQueue<TCPpacket>(size);
         socket = new DatagramSocket(port);
         bytesRecived = 0;
         packetsRecived = 0;
@@ -597,7 +608,7 @@ public class TCPend {
                     handleHandShake(tcpIn, packetIn, fileName);
                     break;
                 case DATA_TRANSFER:
-                    handleDataTransfer(tcpIn, packetIn, sws);
+                    handleDataTransfer(tcpIn, packetIn, sws, mtu);
                     break;
                 case FIN:
                     handleFin(tcpIn, packetIn);
